@@ -74,12 +74,16 @@ On Windows, `python3` and `.venv/bin/activate` usually will not work in PowerShe
 
 On first run, the launcher creates `.venv` inside the folder and installs Screen Printer there. Later runs reuse that local environment.
 
-If the desktop asks whether to trust/execute the launcher, choose **Execute** or **Trust and Launch**. If double-click is blocked, open a terminal in the folder and run:
+If the desktop asks whether to trust/execute the launcher, choose **Execute in Terminal** first. That keeps setup messages visible on first run. Later, **Execute** should also work.
+
+If double-click is blocked or nothing appears, open a terminal in the folder and run:
 
 ```bash
-chmod +x scripts/run_pi.sh scripts/install_pi.sh "Screen Printer.desktop"
-./scripts/install_pi.sh
+chmod +x run-screen-printer.sh scripts/run_pi.sh scripts/install_pi.sh "Screen Printer.desktop"
+./run-screen-printer.sh
 ```
+
+If launch still fails, check `screen-printer-launch.log` in the project folder.
 
 The installer creates launchers in three places:
 

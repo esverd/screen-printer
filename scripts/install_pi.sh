@@ -5,8 +5,9 @@ APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="$APP_DIR/.venv"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 RUNNER="$APP_DIR/scripts/run_pi.sh"
+FOLDER_LAUNCHER="$APP_DIR/run-screen-printer.sh"
 
-chmod +x "$RUNNER"
+chmod +x "$RUNNER" "$FOLDER_LAUNCHER"
 "$RUNNER" --help >/dev/null
 
 DESKTOP_DIR="$HOME/Desktop"
@@ -27,7 +28,17 @@ StartupNotify=false
 EOF
 
 cp "$DESKTOP_FILE" "$DESKTOP_DIR/screen-printer.desktop"
-cp "$DESKTOP_FILE" "$APP_DIR/Screen Printer.desktop"
+cat > "$APP_DIR/Screen Printer.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Screen Printer
+Comment=Run Screen Printer from this folder
+Exec=/bin/bash -lc 'cd "\$(dirname "\$1")" && ./run-screen-printer.sh' dummy %k
+Icon=applications-graphics
+Terminal=true
+Categories=Graphics;Photography;
+StartupNotify=false
+EOF
 chmod +x "$DESKTOP_FILE" "$DESKTOP_DIR/screen-printer.desktop" "$APP_DIR/Screen Printer.desktop"
 
 POWEROFF_FILE="$APP_DIR/Power Off Pi.desktop"

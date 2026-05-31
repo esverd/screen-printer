@@ -2,8 +2,8 @@
 Type=Application
 Name=Screen Printer
 Comment=Run Screen Printer from this folder
-Exec=sh -c 'cd "$(dirname "$0")" && ./scripts/run_pi.sh' %k
+Exec=/bin/bash -lc 'cd "$(dirname "$1")" && ./run-screen-printer.sh' dummy %k
 Icon=applications-graphics
-Terminal=false
+Terminal=true
 Categories=Graphics;Photography;
 StartupNotify=false
