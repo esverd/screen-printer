@@ -72,9 +72,9 @@ On Windows, `python3` and `.venv/bin/activate` usually will not work in PowerShe
 2. Open the copied folder.
 3. Double-click `START_SCREEN_PRINTER.command`.
 
-That is the most reliable mouse-only launcher. It opens a terminal, creates `.venv` inside the folder on first run, installs Screen Printer there, and keeps setup/error messages visible. Later runs reuse that local environment.
+That is the most reliable mouse-only launcher. It opens a terminal, creates `.venv` inside the folder on first run, installs Screen Printer there, creates/refreshes a Desktop shortcut at `~/Desktop/screen-printer.desktop`, and keeps setup/error messages visible. Later runs reuse that local environment.
 
-There is also a `Screen Printer.desktop` launcher for desktop/menu integration, but if the Raspberry Pi desktop is picky about `.desktop` files, use `START_SCREEN_PRINTER.command` instead.
+There is also a `Screen Printer.desktop` launcher for desktop/menu integration, but if the Raspberry Pi desktop is picky about `.desktop` files, use `START_SCREEN_PRINTER.command` once first. After that, try the generated Desktop shortcut.
 
 If double-click is blocked or nothing appears, open a terminal in the folder and run:
 
@@ -83,7 +83,7 @@ chmod +x START_SCREEN_PRINTER.command run-screen-printer.sh scripts/run_pi.sh sc
 ./START_SCREEN_PRINTER.command
 ```
 
-If launch fails, check `screen-printer-launch.log` on the Desktop first; if it is not there, check the project folder.
+If launch fails, check `screen-printer-launch.log` in the project folder.
 
 The installer creates launchers in three places:
 
