@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Power Off Pi
+Comment=Safely shut down the Raspberry Pi now
+Exec=systemctl poweroff
+Icon=system-shutdown
+Terminal=false
+Categories=System;
+StartupNotify=false

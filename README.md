@@ -87,6 +87,13 @@ The installer creates launchers in three places:
 - `~/Desktop/screen-printer.desktop`
 - `~/.local/share/applications/screen-printer.desktop`
 
+It also creates a mouse-only shutdown launcher:
+
+- `Power Off Pi.desktop` inside the project folder
+- `~/Desktop/power-off-pi.desktop`
+
+Double-click **Power Off Pi** to safely shut down immediately before pulling power.
+
 After that, Screen Printer can be launched from the desktop icon or the Raspberry Pi application menu.
 
 If Tkinter or venv support is missing, install it first:

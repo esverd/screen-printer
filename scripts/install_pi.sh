@@ -30,5 +30,20 @@ cp "$DESKTOP_FILE" "$DESKTOP_DIR/screen-printer.desktop"
 cp "$DESKTOP_FILE" "$APP_DIR/Screen Printer.desktop"
 chmod +x "$DESKTOP_FILE" "$DESKTOP_DIR/screen-printer.desktop" "$APP_DIR/Screen Printer.desktop"
 
+POWEROFF_FILE="$APP_DIR/Power Off Pi.desktop"
+cat > "$POWEROFF_FILE" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Power Off Pi
+Comment=Safely shut down the Raspberry Pi now
+Exec=systemctl poweroff
+Icon=system-shutdown
+Terminal=false
+Categories=System;
+StartupNotify=false
+EOF
+cp "$POWEROFF_FILE" "$DESKTOP_DIR/power-off-pi.desktop"
+chmod +x "$POWEROFF_FILE" "$DESKTOP_DIR/power-off-pi.desktop"
+
 echo "Installed Screen Printer."
 echo "Desktop launcher: $DESKTOP_DIR/screen-printer.desktop"
