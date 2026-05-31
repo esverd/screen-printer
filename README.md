@@ -70,23 +70,24 @@ On Windows, `python3` and `.venv/bin/activate` usually will not work in PowerShe
 
 1. Copy the whole `screen-printer` folder from the USB stick to the Pi Desktop.
 2. Open the copied folder.
-3. Double-click `Screen Printer.desktop`.
+3. Double-click `START_SCREEN_PRINTER.command`.
 
-On first run, the launcher creates `.venv` inside the folder and installs Screen Printer there. Later runs reuse that local environment.
+That is the most reliable mouse-only launcher. It opens a terminal, creates `.venv` inside the folder on first run, installs Screen Printer there, and keeps setup/error messages visible. Later runs reuse that local environment.
 
-If the desktop asks whether to trust/execute the launcher, choose **Execute in Terminal** first. That keeps setup messages visible on first run. Later, **Execute** should also work.
+There is also a `Screen Printer.desktop` launcher for desktop/menu integration, but if the Raspberry Pi desktop is picky about `.desktop` files, use `START_SCREEN_PRINTER.command` instead.
 
 If double-click is blocked or nothing appears, open a terminal in the folder and run:
 
 ```bash
-chmod +x run-screen-printer.sh scripts/run_pi.sh scripts/install_pi.sh "Screen Printer.desktop"
-./run-screen-printer.sh
+chmod +x START_SCREEN_PRINTER.command run-screen-printer.sh scripts/run_pi.sh scripts/install_pi.sh "Screen Printer.desktop"
+./START_SCREEN_PRINTER.command
 ```
 
-If launch still fails, check `screen-printer-launch.log` in the project folder.
+If launch fails, check `screen-printer-launch.log` on the Desktop first; if it is not there, check the project folder.
 
 The installer creates launchers in three places:
 
+- `START_SCREEN_PRINTER.command` inside the project folder — recommended double-click launcher
 - `Screen Printer.desktop` inside the project folder
 - `~/Desktop/screen-printer.desktop`
 - `~/.local/share/applications/screen-printer.desktop`

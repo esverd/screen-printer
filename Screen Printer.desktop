@@ -2,7 +2,7 @@
 Type=Application
 Name=Screen Printer
 Comment=Run Screen Printer from this folder
-Exec=/bin/bash -lc 'cd "$(dirname "$1")" && ./run-screen-printer.sh' dummy %k
+Exec=/bin/bash -lc 'cd "$(dirname "$1")" && ./START_SCREEN_PRINTER.command' dummy %k
 Icon=applications-graphics
 Terminal=true
 Categories=Graphics;Photography;
