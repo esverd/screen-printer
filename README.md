@@ -7,9 +7,9 @@ Screen Printer is a lightweight Tkinter/Pillow app for showing adjusted image ne
 - Load JPG, JPEG, and PNG images.
 - Default grayscale preview, with a color toggle.
 - Exposure, contrast, and blur sliders.
-- Invert, horizontal flip, and vertical flip toggles.
+- Invert, rotate clockwise, horizontal flip, and vertical flip toggles.
 - Full-screen Develop mode that hides the editor and mouse cursor.
-- Triple-click Develop mode to show the exit confirmation.
+- Triple-click or press Escape in Develop mode to show the exit confirmation.
 - Versioned JSON sidecar files for settings and exposure metadata.
 
 ## Quick Start
@@ -101,6 +101,8 @@ Manual saves and Develop sessions create new sidecar files next to the source im
 ```
 
 New sidecars are never overwritten. The sidecar created for an active Develop session is updated when that session ends.
+
+Use the open-folder button to load either an image or a `.json` sidecar. Loading a sidecar restores its source image and saved settings.
 
 ## Tests
 

@@ -168,3 +168,18 @@ def update_develop_session(
 
 def read_sidecar(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def source_and_settings_from_sidecar(path: Path) -> tuple[Path, ImageSettings]:
+    payload = read_sidecar(path)
+    source_raw = str(payload.get("source_image_path", "")).strip()
+    if not source_raw:
+        raise ValueError("Sidecar is missing source_image_path.")
+    source_path = Path(source_raw)
+    if not source_path.is_absolute():
+        source_path = (path.parent / source_path).resolve()
+
+    settings_payload = payload.get("settings", {})
+    if not isinstance(settings_payload, dict):
+        settings_payload = {}
+    return source_path, ImageSettings.from_dict(settings_payload)

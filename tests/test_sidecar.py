@@ -8,6 +8,7 @@ from screen_printer.image_ops import ImageSettings
 from screen_printer.sidecar import (
     DevelopSessionMetadata,
     read_sidecar,
+    source_and_settings_from_sidecar,
     update_develop_session,
     write_new_sidecar,
 )
@@ -61,6 +62,31 @@ def test_sidecar_contains_settings_screen_and_source_metadata(tmp_path: Path) ->
     assert payload["settings"]["invert"] is True
     assert payload["settings"]["flip_horizontal"] is True
     assert payload["settings"]["blur_radius"] == 1.5
+
+
+def test_sidecar_can_restore_source_and_settings(tmp_path: Path) -> None:
+    source = tmp_path / "print.png"
+    source.write_bytes(b"placeholder")
+    path = write_new_sidecar(
+        source_image_path=source,
+        source_image_size=(12, 34),
+        screen_size=(480, 320),
+        settings=ImageSettings(
+            grayscale=False,
+            exposure_percent=42,
+            invert=True,
+            rotation_degrees=90,
+        ),
+        created_at=datetime(2026, 5, 31, 12, 0, tzinfo=timezone.utc),
+    )
+
+    restored_source, restored_settings = source_and_settings_from_sidecar(path)
+
+    assert restored_source == source.resolve()
+    assert restored_settings.grayscale is False
+    assert restored_settings.exposure_percent == 42
+    assert restored_settings.invert is True
+    assert restored_settings.rotation_degrees == 90
 
 
 def test_develop_sidecar_is_updated_when_session_ends(tmp_path: Path) -> None:

@@ -63,10 +63,12 @@ class ImageSettings:
     contrast_percent: int = 0
     blur_radius: float = 0.0
     invert: bool = False
+    rotation_degrees: int = 0
     flip_horizontal: bool = False
     flip_vertical: bool = False
 
     def sanitized(self) -> "ImageSettings":
+        rotation = int(round(self.rotation_degrees / 90.0)) * 90
         return ImageSettings(
             grayscale=bool(self.grayscale),
             exposure_percent=_clamp_int(
@@ -81,6 +83,7 @@ class ImageSettings:
             ),
             blur_radius=_clamp_float(self.blur_radius, MIN_BLUR_RADIUS, MAX_BLUR_RADIUS),
             invert=bool(self.invert),
+            rotation_degrees=rotation % 360,
             flip_horizontal=bool(self.flip_horizontal),
             flip_vertical=bool(self.flip_vertical),
         )
@@ -96,6 +99,7 @@ class ImageSettings:
             "contrast_percent": clean.contrast_percent,
             "blur_radius": clean.blur_radius,
             "invert": clean.invert,
+            "rotation_degrees": clean.rotation_degrees,
             "flip_horizontal": clean.flip_horizontal,
             "flip_vertical": clean.flip_vertical,
         }
@@ -108,6 +112,7 @@ class ImageSettings:
             contrast_percent=_coerce_int(payload.get("contrast_percent"), 0),
             blur_radius=_coerce_float(payload.get("blur_radius"), 0.0),
             invert=_coerce_bool(payload.get("invert"), False),
+            rotation_degrees=_coerce_int(payload.get("rotation_degrees"), 0),
             flip_horizontal=_coerce_bool(payload.get("flip_horizontal"), False),
             flip_vertical=_coerce_bool(payload.get("flip_vertical"), False),
         ).sanitized()
@@ -139,6 +144,8 @@ def apply_settings(image: Image.Image, settings: ImageSettings, *, include_inver
     clean = settings.sanitized()
     adjusted = image.convert("RGB")
 
+    if clean.rotation_degrees:
+        adjusted = adjusted.rotate(-clean.rotation_degrees, expand=True, fillcolor="white")
     if clean.flip_horizontal:
         adjusted = ImageOps.mirror(adjusted)
     if clean.flip_vertical:

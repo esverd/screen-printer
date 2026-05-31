@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox
 
 from PIL import Image, ImageTk
 
+from .icons import make_icon
 from .image_ops import (
     ImageSettings,
     load_source_image,
@@ -17,6 +18,7 @@ from .image_ops import (
 from .session import DevelopSessionTimer, TripleClickDetector
 from .sidecar import (
     DevelopSessionMetadata,
+    source_and_settings_from_sidecar,
     update_develop_session,
     write_new_sidecar,
 )
@@ -25,6 +27,8 @@ BG = "#11161d"
 PANEL_BG = "#171f28"
 BUTTON_BG = "#22303d"
 BUTTON_ACTIVE = "#315a72"
+BUTTON_HOVER = "#4f7f9b"
+BUTTON_BORDER = "#9fe3ff"
 BUTTON_FG = "#f2f5f7"
 MUTED = "#9da9b3"
 ACCENT = "#60c2ff"
@@ -102,8 +106,12 @@ class ScreenPrinterApp:
         self._develop_window: tk.Toplevel | None = None
         self._confirm_window: tk.Toplevel | None = None
         self._confirm_after_id: str | None = None
+        self._cursor_trap_after_id: str | None = None
         self._timer = DevelopSessionTimer()
         self._click_detector = TripleClickDetector()
+        self._button_icons: dict[str, ImageTk.PhotoImage] = {}
+        self._button_keys: dict[tk.Button, str | None] = {}
+        self._hovered_buttons: set[tk.Button] = set()
 
         self._build_ui()
         self.root.bind("<Configure>", self._schedule_preview, add="+")
@@ -164,7 +172,7 @@ class ScreenPrinterApp:
 
         self.reset_button = self._button(
             self.slider_frame,
-            "0",
+            "reset",
             "Reset slider",
             self._reset_active_slider,
             min_width=44,
@@ -185,41 +193,48 @@ class ScreenPrinterApp:
 
         self.controls = tk.Frame(self.root, bg=PANEL_BG, height=52)
         self.controls.grid(row=3, column=0, sticky="ew")
-        for column in range(10):
+        for column in range(11):
             self.controls.grid_columnconfigure(column, weight=1, uniform="controls")
 
         self.buttons: dict[str, tk.Button] = {}
         specs = [
-            ("open", "□", "Open image", self.open_image_dialog),
-            ("bw", "◐", "Toggle grayscale", self.toggle_grayscale),
-            ("exposure", "☼", "Exposure", lambda: self.show_slider("exposure")),
-            ("contrast", "◨", "Contrast", lambda: self.show_slider("contrast")),
-            ("blur", "≈", "Blur", lambda: self.show_slider("blur")),
-            ("invert", "●", "Invert", self.toggle_invert),
-            ("flip_h", "↔", "Flip horizontal", self.toggle_flip_horizontal),
-            ("flip_v", "↕", "Flip vertical", self.toggle_flip_vertical),
-            ("save", "▣", "Save settings", self.save_settings),
-            ("develop", "⛶", "Develop", self.enter_develop_mode),
+            ("open", "folder", "Open image or sidecar", self.open_image_dialog),
+            ("bw", "grayscale", "Toggle grayscale", self.toggle_grayscale),
+            ("exposure", "exposure", "Exposure", lambda: self.toggle_slider("exposure")),
+            ("contrast", "contrast", "Contrast", lambda: self.toggle_slider("contrast")),
+            ("blur", "blur", "Blur", lambda: self.toggle_slider("blur")),
+            ("invert", "invert", "Invert", self.toggle_invert),
+            ("rotate", "rotate", "Rotate clockwise", self.rotate_clockwise),
+            ("flip_h", "flip_h", "Flip horizontal", self.toggle_flip_horizontal),
+            ("flip_v", "flip_v", "Flip vertical", self.toggle_flip_vertical),
+            ("save", "save", "Save settings", self.save_settings),
+            ("develop", "camera", "Develop", self.enter_develop_mode),
         ]
-        for column, (key, text, tooltip, command) in enumerate(specs):
-            button = self._button(self.controls, text, tooltip, command)
-            button.grid(row=0, column=column, padx=2, pady=4, sticky="nsew")
+        for column, (key, icon_name, tooltip, command) in enumerate(specs):
+            button = self._button(self.controls, icon_name, tooltip, command, key=key)
+            button.grid(row=0, column=column, padx=1, pady=4, sticky="nsew")
             self.buttons[key] = button
 
-        self._update_toggle_buttons()
+        self._update_button_states()
 
     def _button(
         self,
         parent: tk.Widget,
-        text: str,
+        icon_name: str,
         tooltip: str,
         command: object,
         *,
         min_width: int = 44,
+        key: str | None = None,
     ) -> tk.Button:
+        icon_key = f"{icon_name}:{BUTTON_FG}"
+        icon = self._button_icons.get(icon_key)
+        if icon is None:
+            icon = ImageTk.PhotoImage(make_icon(icon_name, color=BUTTON_FG))
+            self._button_icons[icon_key] = icon
         button = tk.Button(
             parent,
-            text=text,
+            image=icon,
             command=command,
             bg=BUTTON_BG,
             activebackground=BUTTON_ACTIVE,
@@ -227,29 +242,74 @@ class ScreenPrinterApp:
             activeforeground=BUTTON_FG,
             relief="flat",
             bd=0,
-            highlightthickness=0,
+            highlightbackground=BUTTON_BG,
+            highlightcolor=BUTTON_BORDER,
+            highlightthickness=2,
             font=("TkDefaultFont", 14, "bold"),
             padx=0,
             pady=0,
+            takefocus=True,
         )
-        button.configure(width=max(1, min_width // 14), height=2)
+        button.configure(width=max(34, min_width - 8), height=42)
+        self._button_keys[button] = key
+        button.bind("<Enter>", lambda _event, item=button: self._set_button_hover(item, True), add="+")
+        button.bind("<Leave>", lambda _event, item=button: self._set_button_hover(item, False), add="+")
+        button.bind("<FocusIn>", lambda _event, item=button: self._set_button_hover(item, True), add="+")
+        button.bind("<FocusOut>", lambda _event, item=button: self._set_button_hover(item, False), add="+")
         Tooltip(button, tooltip)
         return button
 
+    def _set_button_hover(self, button: tk.Button, hovered: bool) -> None:
+        if hovered:
+            self._hovered_buttons.add(button)
+        else:
+            self._hovered_buttons.discard(button)
+        self._update_button_states()
+
+    def _style_button(self, button: tk.Button, *, active: bool = False) -> None:
+        hovered = button in self._hovered_buttons
+        button.configure(
+            bg=BUTTON_HOVER if hovered else BUTTON_ACTIVE if active else BUTTON_BG,
+            activebackground=BUTTON_HOVER,
+            highlightbackground=BUTTON_BORDER if hovered else BUTTON_BG,
+            highlightcolor=BUTTON_BORDER,
+            relief="solid" if hovered else "flat",
+        )
+
     def open_image_dialog(self) -> None:
         filename = filedialog.askopenfilename(
-            title="Open image",
+            title="Open image or sidecar",
             filetypes=[
-                ("Images", "*.jpg *.jpeg *.png"),
+                ("Images and sidecars", "*.jpg *.jpeg *.png *.json"),
                 ("JPEG", "*.jpg *.jpeg"),
                 ("PNG", "*.png"),
+                ("Screen Printer sidecar", "*.json"),
                 ("All files", "*.*"),
             ],
         )
         if filename:
-            self.load_image(Path(filename))
+            self.load_path(Path(filename))
 
-    def load_image(self, path: Path) -> None:
+    def load_path(self, path: Path) -> None:
+        if path.suffix.lower() == ".json":
+            self.load_sidecar(path)
+        else:
+            self.load_image(path)
+
+    def load_sidecar(self, path: Path) -> None:
+        try:
+            source_path, settings = source_and_settings_from_sidecar(path)
+            self.load_image(source_path, settings=settings, sidecar_path=path)
+        except Exception as exc:  # pragma: no cover - GUI message wrapper
+            messagebox.showerror("Open sidecar", str(exc))
+
+    def load_image(
+        self,
+        path: Path,
+        *,
+        settings: ImageSettings | None = None,
+        sidecar_path: Path | None = None,
+    ) -> None:
         try:
             image = load_source_image(path)
         except Exception as exc:  # pragma: no cover - GUI message wrapper
@@ -257,95 +317,79 @@ class ScreenPrinterApp:
             return
         self.source_path = path
         self.source_image = image
-        self.last_sidecar_path = None
+        self.last_sidecar_path = sidecar_path
         self.last_exposure_seconds = None
         self.active_develop_sidecar = None
-        self.settings = ImageSettings()
-        self._update_toggle_buttons()
+        self.settings = (settings or ImageSettings()).sanitized()
+        self._active_slider = None
+        self.slider_frame.grid_remove()
+        self._update_button_states()
+        self._update_meta()
+        self._schedule_preview()
+
+    def _replace_settings(self, **changes: object) -> None:
+        payload = self.settings.to_dict()
+        payload.update(changes)
+        self.settings = ImageSettings.from_dict(payload)
+        self._update_button_states()
         self._update_meta()
         self._schedule_preview()
 
     def toggle_grayscale(self) -> None:
-        self.settings = self.settings.with_invert(self.settings.invert)
-        self.settings = ImageSettings(
-            grayscale=not self.settings.grayscale,
-            exposure_percent=self.settings.exposure_percent,
-            contrast_percent=self.settings.contrast_percent,
-            blur_radius=self.settings.blur_radius,
-            invert=self.settings.invert,
-            flip_horizontal=self.settings.flip_horizontal,
-            flip_vertical=self.settings.flip_vertical,
-        ).sanitized()
-        self._update_toggle_buttons()
-        self._schedule_preview()
+        self._replace_settings(grayscale=not self.settings.grayscale)
 
     def toggle_invert(self) -> None:
-        self.settings = ImageSettings(
-            grayscale=self.settings.grayscale,
-            exposure_percent=self.settings.exposure_percent,
-            contrast_percent=self.settings.contrast_percent,
-            blur_radius=self.settings.blur_radius,
-            invert=not self.settings.invert,
-            flip_horizontal=self.settings.flip_horizontal,
-            flip_vertical=self.settings.flip_vertical,
-        ).sanitized()
-        self._update_toggle_buttons()
-        self._schedule_preview()
+        self._replace_settings(invert=not self.settings.invert)
+
+    def rotate_clockwise(self) -> None:
+        self._replace_settings(rotation_degrees=self.settings.rotation_degrees + 90)
 
     def toggle_flip_horizontal(self) -> None:
-        self.settings = ImageSettings(
-            grayscale=self.settings.grayscale,
-            exposure_percent=self.settings.exposure_percent,
-            contrast_percent=self.settings.contrast_percent,
-            blur_radius=self.settings.blur_radius,
-            invert=self.settings.invert,
-            flip_horizontal=not self.settings.flip_horizontal,
-            flip_vertical=self.settings.flip_vertical,
-        ).sanitized()
-        self._update_toggle_buttons()
-        self._schedule_preview()
+        self._replace_settings(flip_horizontal=not self.settings.flip_horizontal)
 
     def toggle_flip_vertical(self) -> None:
-        self.settings = ImageSettings(
-            grayscale=self.settings.grayscale,
-            exposure_percent=self.settings.exposure_percent,
-            contrast_percent=self.settings.contrast_percent,
-            blur_radius=self.settings.blur_radius,
-            invert=self.settings.invert,
-            flip_horizontal=self.settings.flip_horizontal,
-            flip_vertical=not self.settings.flip_vertical,
-        ).sanitized()
-        self._update_toggle_buttons()
-        self._schedule_preview()
+        self._replace_settings(flip_vertical=not self.settings.flip_vertical)
 
-    def _update_toggle_buttons(self) -> None:
+    def _update_button_states(self) -> None:
         active = {
             "bw": self.settings.grayscale,
             "invert": self.settings.invert,
             "flip_h": self.settings.flip_horizontal,
             "flip_v": self.settings.flip_vertical,
+            "exposure": self._active_slider == "exposure",
+            "contrast": self._active_slider == "contrast",
+            "blur": self._active_slider == "blur",
         }
-        for key, is_active in active.items():
-            button = self.buttons.get(key)
-            if button is not None:
-                button.configure(bg=BUTTON_ACTIVE if is_active else BUTTON_BG)
+        for key, button in self.buttons.items():
+            self._style_button(button, active=active.get(key, False))
+        if hasattr(self, "reset_button"):
+            self._style_button(self.reset_button)
+
+    def toggle_slider(self, kind: str) -> None:
+        if self._active_slider == kind and self.slider_frame.winfo_ismapped():
+            self._active_slider = None
+            self.slider_frame.grid_remove()
+            self._update_button_states()
+            return
+        self.show_slider(kind)
 
     def show_slider(self, kind: str) -> None:
         self._active_slider = kind
         self.slider_frame.grid()
         if kind == "exposure":
-            self.slider_title.configure(text="☼")
+            self.slider_title.configure(image=self._button_icons["exposure:" + BUTTON_FG], text="")
             self.slider.configure(from_=-100, to=300, resolution=1)
             self.slider.set(self.settings.exposure_percent)
         elif kind == "contrast":
-            self.slider_title.configure(text="◨")
+            self.slider_title.configure(image=self._button_icons["contrast:" + BUTTON_FG], text="")
             self.slider.configure(from_=-100, to=300, resolution=1)
             self.slider.set(self.settings.contrast_percent)
         else:
-            self.slider_title.configure(text="≈")
+            self.slider_title.configure(image=self._button_icons["blur:" + BUTTON_FG], text="")
             self.slider.configure(from_=0, to=20, resolution=0.1)
             self.slider.set(self.settings.blur_radius)
         self.slider_readout.configure(text=self._format_slider_value(float(self.slider.get())))
+        self._update_button_states()
 
     def _reset_active_slider(self) -> None:
         if self._active_slider == "blur":
@@ -369,35 +413,16 @@ class ScreenPrinterApp:
         self._slider_after_id = None
         value = float(self.slider.get())
         if self._active_slider == "exposure":
-            self.settings = ImageSettings(
-                grayscale=self.settings.grayscale,
-                exposure_percent=int(round(value)),
-                contrast_percent=self.settings.contrast_percent,
-                blur_radius=self.settings.blur_radius,
-                invert=self.settings.invert,
-                flip_horizontal=self.settings.flip_horizontal,
-                flip_vertical=self.settings.flip_vertical,
-            ).sanitized()
+            self.settings = ImageSettings.from_dict(
+                {**self.settings.to_dict(), "exposure_percent": int(round(value))}
+            )
         elif self._active_slider == "contrast":
-            self.settings = ImageSettings(
-                grayscale=self.settings.grayscale,
-                exposure_percent=self.settings.exposure_percent,
-                contrast_percent=int(round(value)),
-                blur_radius=self.settings.blur_radius,
-                invert=self.settings.invert,
-                flip_horizontal=self.settings.flip_horizontal,
-                flip_vertical=self.settings.flip_vertical,
-            ).sanitized()
+            self.settings = ImageSettings.from_dict(
+                {**self.settings.to_dict(), "contrast_percent": int(round(value))}
+            )
         elif self._active_slider == "blur":
-            self.settings = ImageSettings(
-                grayscale=self.settings.grayscale,
-                exposure_percent=self.settings.exposure_percent,
-                contrast_percent=self.settings.contrast_percent,
-                blur_radius=value,
-                invert=self.settings.invert,
-                flip_horizontal=self.settings.flip_horizontal,
-                flip_vertical=self.settings.flip_vertical,
-            ).sanitized()
+            self.settings = ImageSettings.from_dict({**self.settings.to_dict(), "blur_radius": value})
+        self._update_button_states()
         self._update_meta()
         self._schedule_preview()
 
@@ -492,17 +517,25 @@ class ScreenPrinterApp:
         label = tk.Label(window, image=self._develop_image, bg="black", bd=0, highlightthickness=0, cursor="none")
         label.pack(fill="both", expand=True)
         label.bind("<Button-1>", self._handle_develop_click, add="+")
+        label.bind("<Escape>", self._handle_develop_escape, add="+")
+        window.bind("<Escape>", self._handle_develop_escape, add="+")
         window.protocol("WM_DELETE_WINDOW", lambda: None)
         window.focus_force()
         self._develop_window = window
         self._timer.start()
         self._update_meta()
 
-    def _handle_develop_click(self, _event: object | None = None) -> None:
-        if self._click_detector.register_click():
-            self._show_confirm_dialog()
+    def _handle_develop_escape(self, _event: object | None = None) -> None:
+        self._show_confirm_dialog()
 
-    def _show_confirm_dialog(self) -> None:
+    def _handle_develop_click(self, event: tk.Event | None = None) -> None:
+        if self._click_detector.register_click():
+            pointer = None
+            if event is not None:
+                pointer = (int(event.x_root), int(event.y_root))
+            self._show_confirm_dialog(pointer=pointer)
+
+    def _show_confirm_dialog(self, *, pointer: tuple[int, int] | None = None) -> None:
         if self._develop_window is None:
             return
         if self._confirm_window is not None:
@@ -515,7 +548,13 @@ class ScreenPrinterApp:
         dialog.attributes("-topmost", True)
         width, height = 160, 64
         screen_width, screen_height = self._active_develop_screen_size
-        dialog.geometry(f"{width}x{height}+{max(0, screen_width - width - 8)}+{max(0, screen_height - height - 8)}")
+        if pointer is None:
+            left = max(0, screen_width - width - 8)
+            top = max(0, screen_height - height - 8)
+        else:
+            left = max(0, min(screen_width - width, pointer[0] - (width // 2)))
+            top = max(0, min(screen_height - height, pointer[1] - (height // 2)))
+        dialog.geometry(f"{width}x{height}+{left}+{top}")
         dialog.grid_columnconfigure(0, weight=1)
         dialog.grid_columnconfigure(1, weight=1)
         confirm = tk.Button(
@@ -528,6 +567,8 @@ class ScreenPrinterApp:
             activeforeground=BUTTON_FG,
             relief="flat",
             bd=0,
+            highlightthickness=2,
+            highlightbackground=BUTTON_BORDER,
             font=("TkDefaultFont", 20, "bold"),
         )
         cancel = tk.Button(
@@ -540,14 +581,60 @@ class ScreenPrinterApp:
             activeforeground=BUTTON_FG,
             relief="flat",
             bd=0,
+            highlightthickness=2,
+            highlightbackground=BUTTON_BORDER,
             font=("TkDefaultFont", 20, "bold"),
         )
         confirm.grid(row=0, column=0, sticky="nsew", padx=(6, 3), pady=6)
         cancel.grid(row=0, column=1, sticky="nsew", padx=(3, 6), pady=6)
         self._confirm_window = dialog
         self._confirm_after_id = dialog.after(30_000, self._cancel_confirm_dialog)
+        dialog.update_idletasks()
+        cancel.focus_set()
+        self._warp_pointer_to_button(cancel)
+        self._trap_cursor_in_confirm_dialog()
+
+    def _warp_pointer_to_button(self, button: tk.Widget) -> None:
+        root_x = button.winfo_rootx()
+        root_y = button.winfo_rooty()
+        local_x = root_x - button.winfo_toplevel().winfo_rootx() + (button.winfo_width() // 2)
+        local_y = root_y - button.winfo_toplevel().winfo_rooty() + (button.winfo_height() // 2)
+        try:
+            button.winfo_toplevel().event_generate("<Motion>", warp=True, x=local_x, y=local_y)
+        except tk.TclError:
+            pass
+
+    def _trap_cursor_in_confirm_dialog(self) -> None:
+        dialog = self._confirm_window
+        if dialog is None:
+            self._cursor_trap_after_id = None
+            return
+        root_x = dialog.winfo_rootx()
+        root_y = dialog.winfo_rooty()
+        width = max(1, dialog.winfo_width())
+        height = max(1, dialog.winfo_height())
+        pointer_x, pointer_y = dialog.winfo_pointerxy()
+        clamped_x = max(root_x + 4, min(root_x + width - 5, pointer_x))
+        clamped_y = max(root_y + 4, min(root_y + height - 5, pointer_y))
+        if (clamped_x, clamped_y) != (pointer_x, pointer_y):
+            try:
+                dialog.event_generate(
+                    "<Motion>",
+                    warp=True,
+                    x=clamped_x - root_x,
+                    y=clamped_y - root_y,
+                )
+            except tk.TclError:
+                pass
+        self._cursor_trap_after_id = dialog.after(40, self._trap_cursor_in_confirm_dialog)
 
     def _cancel_confirm_dialog(self) -> None:
+        if self._cursor_trap_after_id is not None and self._confirm_window is not None:
+            try:
+                self._confirm_window.after_cancel(self._cursor_trap_after_id)
+            except tk.TclError:
+                pass
+        self._cursor_trap_after_id = None
         if self._confirm_after_id is not None and self._confirm_window is not None:
             try:
                 self._confirm_window.after_cancel(self._confirm_after_id)
@@ -592,14 +679,24 @@ class ScreenPrinterApp:
         if self.source_path is None or self.source_image is None:
             self.meta.configure(text="Load image", fg=MUTED)
             return
-        parts = [self.source_path.name, f"{self.source_image.width}x{self.source_image.height}"]
+        image_name = self.source_path.name
+        if len(image_name) > 22:
+            image_name = f"{image_name[:10]}...{image_name[-9:]}"
+        parts = [image_name, f"{self.source_image.width}x{self.source_image.height}"]
         if self.last_exposure_seconds is not None:
             parts.append(f"{self.last_exposure_seconds:.1f}s")
         parts.append(
-            f"E{self.settings.exposure_percent} C{self.settings.contrast_percent} B{self.settings.blur_radius:.1f}"
+            " ".join(
+                [
+                    f"E{self.settings.exposure_percent}",
+                    f"C{self.settings.contrast_percent}",
+                    f"B{self.settings.blur_radius:.1f}",
+                    f"R{self.settings.rotation_degrees}",
+                ]
+            )
         )
         if self.last_sidecar_path is not None:
-            parts.append(self.last_sidecar_path.name)
+            parts.append("sidecar")
         self.meta.configure(text="  |  ".join(parts), fg=MUTED)
 
 
@@ -615,6 +712,6 @@ def main(argv: list[str] | None = None) -> int:
     root = tk.Tk()
     app = ScreenPrinterApp(root, initial_geometry=args.geometry)
     if args.image:
-        root.after(100, lambda: app.load_image(args.image))
+        root.after(100, lambda: app.load_path(args.image))
     root.mainloop()
     return 0

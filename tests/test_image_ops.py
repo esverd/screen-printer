@@ -84,6 +84,17 @@ def test_invert_and_flips_are_applied() -> None:
     assert inverted.getpixel((0, 0)) == (245, 235, 225)
 
 
+def test_rotation_is_applied_and_sanitized() -> None:
+    image = Image.new("RGB", (2, 3), "black")
+    image.putpixel((0, 0), (255, 0, 0))
+
+    rotated = apply_settings(image, ImageSettings(grayscale=False, rotation_degrees=90))
+
+    assert rotated.size == (3, 2)
+    assert rotated.getpixel((2, 0)) == (255, 0, 0)
+    assert ImageSettings(rotation_degrees=450).sanitized().rotation_degrees == 90
+
+
 def test_develop_letterbox_is_black_before_inversion() -> None:
     image = Image.new("RGB", (2, 2), "white")
     rendered = render_develop_image(
