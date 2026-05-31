@@ -114,6 +114,50 @@ For the 3.5-inch screen, you can force a small window size:
 SCREEN_PRINTER_GEOMETRY=480x320 ./scripts/run_pi.sh
 ```
 
+## Raspberry Pi Kiosk Workflow
+
+Kiosk mode is intended for the SPI screen: boot the Pi, launch one fullscreen Screen Printer app, and avoid desktop icons, taskbars, OS file pickers, terminals, and draggable windows on the small display.
+
+1. Put images in the kiosk folder from another machine or device:
+   - default: `/home/sverd/Pictures/screen-prints/`
+   - copy by SSH/SFTP/Samba/USB; no graphical file picker is needed on the Pi
+2. Start fullscreen kiosk mode:
+
+```bash
+./scripts/run_kiosk.sh
+```
+
+or directly:
+
+```bash
+python -m screen_printer --kiosk --image-dir /home/sverd/Pictures/screen-prints
+```
+
+In kiosk mode, the folder button opens the in-app image library instead of an OS file picker. The app scans only the top level of the image directory, newest files first, and shows JPG/PNG images plus Screen Printer sidecar JSON files. Tap/click an image to open it, then use the existing large custom controls for grayscale, exposure, contrast, blur, rotate, flip, invert, save, and Develop.
+
+For testing or a different folder:
+
+```bash
+SCREEN_PRINTER_IMAGE_DIR=/tmp/screen-prints ./scripts/run_kiosk.sh
+# or
+python -m screen_printer --kiosk --image-dir /tmp/screen-prints --geometry 480x320
+```
+
+### Optional autostart helper
+
+An opt-in user-systemd helper is included. It prints what it will do by default and only writes/enables the service when passed `--yes`:
+
+```bash
+./scripts/install_kiosk_autostart.sh
+./scripts/install_kiosk_autostart.sh --yes
+```
+
+It refuses to overwrite an existing service. After installing, start now with:
+
+```bash
+systemctl --user start screen-printer-kiosk.service
+```
+
 ## Develop Mode
 
 Develop mode renders the active image to the connected screen size with full-image fit. If the image aspect ratio does not match the display, letterbox bars are inserted before inversion, so inverted negatives use white bars.

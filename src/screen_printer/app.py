@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 import tkinter as tk
@@ -9,6 +10,7 @@ from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 
 from .icons import make_icon
+from .library import DEFAULT_KIOSK_IMAGE_DIR, LibraryItem, image_directory_from_env, scan_image_directory
 from .image_ops import (
     ImageSettings,
     contain_image,
@@ -83,13 +85,29 @@ class Tooltip:
 
 
 class ScreenPrinterApp:
-    def __init__(self, root: tk.Tk, *, initial_geometry: str | None = None) -> None:
+    def __init__(
+        self,
+        root: tk.Tk,
+        *,
+        initial_geometry: str | None = None,
+        kiosk: bool = False,
+        image_dir: Path | None = None,
+        scan_limit: int = 200,
+    ) -> None:
         self.root = root
         self.root.title("Screen Printer")
         self.root.configure(bg=BG)
+        self.kiosk = kiosk
+        self.image_dir = image_dir or DEFAULT_KIOSK_IMAGE_DIR
+        self.scan_limit = scan_limit
+        self.library_items: list[LibraryItem] = []
+        self._thumbnail_images: dict[Path, ImageTk.PhotoImage] = {}
         self.root.minsize(360, 240)
         if initial_geometry:
             self.root.geometry(initial_geometry)
+        if self.kiosk:
+            self.root.attributes("-fullscreen", True)
+            self.root.configure(cursor="arrow")
 
         self.source_path: Path | None = None
         self.source_image: Image.Image | None = None
@@ -116,8 +134,15 @@ class ScreenPrinterApp:
         self._button_keys: dict[tk.Button, str | None] = {}
         self._hovered_buttons: set[tk.Button] = set()
 
+        self.gallery_frame: tk.Frame | None = None
+        self.gallery_canvas: tk.Canvas | None = None
+        self.gallery_inner: tk.Frame | None = None
+
         self._build_ui()
         self.root.bind("<Configure>", self._schedule_preview, add="+")
+        if self.kiosk:
+            self.root.bind("<Escape>", lambda _event: self.root.attributes("-fullscreen", False), add="+")
+            self.root.after(50, self.show_gallery)
 
     def _build_ui(self) -> None:
         self.root.grid_rowconfigure(0, weight=1)
@@ -201,7 +226,7 @@ class ScreenPrinterApp:
 
         self.buttons: dict[str, tk.Button] = {}
         specs = [
-            ("open", "folder", "Open image or sidecar", self.open_image_dialog),
+            ("open", "folder", "Image library" if self.kiosk else "Open image or sidecar", self.show_gallery if self.kiosk else self.open_image_dialog),
             ("bw", "grayscale", "Toggle grayscale", self.toggle_grayscale),
             ("exposure", "exposure", "Exposure", lambda: self.toggle_slider("exposure")),
             ("contrast", "contrast", "Contrast", lambda: self.toggle_slider("contrast")),
@@ -219,6 +244,186 @@ class ScreenPrinterApp:
             self.buttons[key] = button
 
         self._update_button_states()
+
+    def _build_gallery_ui(self) -> None:
+        if self.gallery_frame is not None:
+            return
+        frame = tk.Frame(self.root, bg=BG)
+        frame.grid(row=0, column=0, rowspan=4, sticky="nsew")
+        frame.grid_rowconfigure(1, weight=1)
+        frame.grid_columnconfigure(0, weight=1)
+
+        header = tk.Frame(frame, bg=PANEL_BG, height=44)
+        header.grid(row=0, column=0, sticky="ew")
+        header.grid_columnconfigure(0, weight=1)
+        self.gallery_title = tk.Label(
+            header,
+            text="Images",
+            bg=PANEL_BG,
+            fg=BUTTON_FG,
+            anchor="w",
+            padx=8,
+            font=("TkDefaultFont", 14, "bold"),
+        )
+        self.gallery_title.grid(row=0, column=0, sticky="ew", pady=7)
+        refresh = tk.Button(
+            header,
+            text="↻",
+            command=self.refresh_gallery,
+            bg=BUTTON_BG,
+            fg=BUTTON_FG,
+            activebackground=BUTTON_ACTIVE,
+            activeforeground=BUTTON_FG,
+            relief="flat",
+            bd=0,
+            font=("TkDefaultFont", 16, "bold"),
+            width=3,
+        )
+        refresh.grid(row=0, column=1, padx=4, pady=4)
+
+        canvas = tk.Canvas(frame, bg=BG, bd=0, highlightthickness=0)
+        up = tk.Button(
+            header,
+            text="▲",
+            command=lambda: canvas.yview_scroll(-3, "units"),
+            bg=BUTTON_BG,
+            fg=BUTTON_FG,
+            activebackground=BUTTON_ACTIVE,
+            activeforeground=BUTTON_FG,
+            relief="flat",
+            bd=0,
+            font=("TkDefaultFont", 12, "bold"),
+            width=3,
+        )
+        down = tk.Button(
+            header,
+            text="▼",
+            command=lambda: canvas.yview_scroll(3, "units"),
+            bg=BUTTON_BG,
+            fg=BUTTON_FG,
+            activebackground=BUTTON_ACTIVE,
+            activeforeground=BUTTON_FG,
+            relief="flat",
+            bd=0,
+            font=("TkDefaultFont", 12, "bold"),
+            width=3,
+        )
+        up.grid(row=0, column=2, padx=(0, 4), pady=4)
+        down.grid(row=0, column=3, padx=(0, 4), pady=4)
+        if not self.kiosk:
+            close = tk.Button(
+                header,
+                text="×",
+                command=self.hide_gallery,
+                bg="#4b2930",
+                fg=BUTTON_FG,
+                activebackground="#713d48",
+                activeforeground=BUTTON_FG,
+                relief="flat",
+                bd=0,
+                font=("TkDefaultFont", 16, "bold"),
+                width=3,
+            )
+            close.grid(row=0, column=4, padx=(0, 4), pady=4)
+
+        canvas.grid(row=1, column=0, sticky="nsew")
+        inner = tk.Frame(canvas, bg=BG)
+        canvas.create_window((0, 0), window=inner, anchor="nw", tags=("inner",))
+        inner.bind("<Configure>", lambda _event: canvas.configure(scrollregion=canvas.bbox("all")), add="+")
+        canvas.bind("<Configure>", lambda event: canvas.itemconfigure("inner", width=event.width), add="+")
+        canvas.bind("<Button-4>", lambda _event: canvas.yview_scroll(-3, "units"), add="+")
+        canvas.bind("<Button-5>", lambda _event: canvas.yview_scroll(3, "units"), add="+")
+        self.gallery_frame = frame
+        self.gallery_canvas = canvas
+        self.gallery_inner = inner
+
+    def show_gallery(self) -> None:
+        self._build_gallery_ui()
+        self.refresh_gallery()
+        assert self.gallery_frame is not None
+        self.gallery_frame.lift()
+
+    def hide_gallery(self) -> None:
+        if self.gallery_frame is not None:
+            self.gallery_frame.lower()
+
+    def refresh_gallery(self) -> None:
+        self._build_gallery_ui()
+        assert self.gallery_inner is not None
+        self.library_items = scan_image_directory(self.image_dir, limit=self.scan_limit)
+        self._thumbnail_images.clear()
+        for child in self.gallery_inner.winfo_children():
+            child.destroy()
+        if hasattr(self, "gallery_title"):
+            self.gallery_title.configure(text=f"Images: {self.image_dir}")
+        if not self.library_items:
+            msg = (
+                f"No images found\nPut JPG/PNG files in:\n{self.image_dir}"
+                if self.image_dir.exists()
+                else f"Folder not found\nCreate or mount:\n{self.image_dir}"
+            )
+            tk.Label(
+                self.gallery_inner,
+                text=msg,
+                bg=BG,
+                fg=MUTED,
+                justify="center",
+                font=("TkDefaultFont", 12),
+                pady=36,
+                wraplength=430,
+            ).pack(fill="both", expand=True)
+            return
+        for item in self.library_items:
+            self._add_gallery_item(item)
+
+    def _add_gallery_item(self, item: LibraryItem) -> None:
+        assert self.gallery_inner is not None
+        row = tk.Frame(self.gallery_inner, bg=BUTTON_BG, bd=0, highlightthickness=1, highlightbackground="#0a0e12")
+        row.pack(fill="x", padx=4, pady=3)
+        row.grid_columnconfigure(1, weight=1)
+        thumb_label = tk.Label(row, bg="#05070a", width=72, height=54)
+        thumb_label.grid(row=0, column=0, padx=5, pady=5)
+        thumb = self._make_thumbnail(item.path)
+        if thumb is not None:
+            thumb_label.configure(image=thumb)
+        name = item.display_name
+        if len(name) > 34:
+            name = f"{name[:16]}…{name[-15:]}"
+        suffix = "settings" if item.is_sidecar else item.path.suffix.lower().lstrip(".").upper()
+        text = f"{name}\n{suffix}"
+        label = tk.Label(
+            row,
+            text=text,
+            bg=BUTTON_BG,
+            fg=BUTTON_FG,
+            justify="left",
+            anchor="w",
+            font=("TkDefaultFont", 11, "bold"),
+        )
+        label.grid(row=0, column=1, sticky="ew", padx=(0, 5), pady=5)
+        command = lambda path=item.path: self._select_library_path(path)
+        for widget in (row, thumb_label, label):
+            widget.bind("<Button-1>", lambda _event, cmd=command: cmd(), add="+")
+
+    def _make_thumbnail(self, path: Path) -> ImageTk.PhotoImage | None:
+        if path.suffix.lower() == ".json":
+            return None
+        try:
+            image = load_source_image(path)
+            image.thumbnail((72, 54))
+            canvas = Image.new("RGB", (72, 54), "#05070a")
+            left = (72 - image.width) // 2
+            top = (54 - image.height) // 2
+            canvas.paste(image.convert("RGB"), (left, top))
+        except Exception:
+            return None
+        thumb = ImageTk.PhotoImage(canvas)
+        self._thumbnail_images[path] = thumb
+        return thumb
+
+    def _select_library_path(self, path: Path) -> None:
+        self.hide_gallery()
+        self.load_path(path)
 
     def _button(
         self,
@@ -708,13 +913,36 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Lightweight screen negative exposure app")
     parser.add_argument("--geometry", help="Initial editor window geometry, for example 480x320")
     parser.add_argument("--image", type=Path, help="Image to load on startup")
+    parser.add_argument("--kiosk", action="store_true", help="Start fullscreen with the in-app image library")
+    parser.add_argument(
+        "--image-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory scanned by kiosk mode. Defaults to SCREEN_PRINTER_IMAGE_DIR "
+            f"or {DEFAULT_KIOSK_IMAGE_DIR}"
+        ),
+    )
+    parser.add_argument(
+        "--scan-limit",
+        type=int,
+        default=200,
+        help="Maximum number of top-level image/sidecar files shown in the kiosk library",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    image_dir = args.image_dir or image_directory_from_env(os.environ.get("SCREEN_PRINTER_IMAGE_DIR"))
     root = tk.Tk()
-    app = ScreenPrinterApp(root, initial_geometry=args.geometry)
+    app = ScreenPrinterApp(
+        root,
+        initial_geometry=args.geometry,
+        kiosk=args.kiosk,
+        image_dir=image_dir,
+        scan_limit=args.scan_limit,
+    )
     if args.image:
         root.after(100, lambda: app.load_path(args.image))
     root.mainloop()
