@@ -112,7 +112,14 @@ class ScreenPrinterApp:
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
-        self.preview = tk.Label(self.root, bg="#05070a", bd=0, highlightthickness=0)
+        self.preview = tk.Canvas(
+            self.root,
+            bg="#05070a",
+            bd=0,
+            highlightthickness=0,
+            width=1,
+            height=1,
+        )
         self.preview.grid(row=0, column=0, sticky="nsew")
 
         self.slider_frame = tk.Frame(self.root, bg=PANEL_BG, height=52)
@@ -401,8 +408,8 @@ class ScreenPrinterApp:
 
     def _render_preview(self) -> None:
         self._preview_after_id = None
+        self.preview.delete("all")
         if self.source_image is None:
-            self.preview.configure(image="", text="", bg="#05070a")
             return
         width = max(1, self.preview.winfo_width())
         height = max(1, self.preview.winfo_height())
@@ -412,7 +419,12 @@ class ScreenPrinterApp:
             max_size=(width, height),
         )
         self._preview_image = ImageTk.PhotoImage(preview)
-        self.preview.configure(image=self._preview_image, bg="#05070a")
+        self.preview.create_image(
+            width // 2,
+            height // 2,
+            image=self._preview_image,
+            anchor="center",
+        )
 
     def _source_size(self) -> tuple[int, int]:
         if self.source_image is None:
