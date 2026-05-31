@@ -104,6 +104,12 @@ New sidecars are never overwritten. The sidecar created for an active Develop se
 
 Use the open-folder button to load either an image or a `.json` sidecar. Loading a sidecar restores its source image and saved settings.
 
+## Raspberry Pi Performance Notes
+
+The editor keeps a smaller preview copy in memory so slider movement stays responsive on older hardware. Develop mode renders to the connected screen size before applying the expensive tonal adjustments, because pixels beyond the display resolution cannot be shown.
+
+For the smoothest Pi 3B experience, use images reasonably close to the target display aspect ratio, keep other desktop apps closed while exposing, and avoid very high blur values on huge source photos.
+
 ## Tests
 
 ```bash

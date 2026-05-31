@@ -16,8 +16,10 @@ MAX_BLUR_RADIUS = 20.0
 
 try:
     RESAMPLE_LANCZOS = Image.Resampling.LANCZOS
+    RESAMPLE_BILINEAR = Image.Resampling.BILINEAR
 except AttributeError:  # pragma: no cover - Pillow < 9 fallback
     RESAMPLE_LANCZOS = Image.LANCZOS
+    RESAMPLE_BILINEAR = Image.BILINEAR
 
 
 def _clamp_int(value: int | float, minimum: int, maximum: int) -> int:
@@ -140,7 +142,7 @@ def load_source_image(path: Path) -> Image.Image:
         return oriented.convert("RGB")
 
 
-def apply_settings(image: Image.Image, settings: ImageSettings, *, include_invert: bool = True) -> Image.Image:
+def apply_geometry(image: Image.Image, settings: ImageSettings) -> Image.Image:
     clean = settings.sanitized()
     adjusted = image.convert("RGB")
 
@@ -150,6 +152,18 @@ def apply_settings(image: Image.Image, settings: ImageSettings, *, include_inver
         adjusted = ImageOps.mirror(adjusted)
     if clean.flip_vertical:
         adjusted = ImageOps.flip(adjusted)
+    return adjusted.convert("RGB")
+
+
+def apply_tonal_adjustments(
+    image: Image.Image,
+    settings: ImageSettings,
+    *,
+    include_invert: bool = True,
+) -> Image.Image:
+    clean = settings.sanitized()
+    adjusted = image.convert("RGB")
+
     if clean.grayscale:
         adjusted = adjusted.convert("L")
 
@@ -167,12 +181,34 @@ def apply_settings(image: Image.Image, settings: ImageSettings, *, include_inver
     return adjusted.convert("RGB")
 
 
-def contain_image(image: Image.Image, max_size: tuple[int, int]) -> Image.Image:
+def apply_settings(image: Image.Image, settings: ImageSettings, *, include_invert: bool = True) -> Image.Image:
+    return apply_tonal_adjustments(
+        apply_geometry(image, settings),
+        settings,
+        include_invert=include_invert,
+    )
+
+
+def contain_image(
+    image: Image.Image,
+    max_size: tuple[int, int],
+    *,
+    allow_upscale: bool = False,
+    resample: int = RESAMPLE_LANCZOS,
+) -> Image.Image:
     max_width = max(1, int(max_size[0]))
     max_height = max(1, int(max_size[1]))
-    contained = image.copy()
-    contained.thumbnail((max_width, max_height), RESAMPLE_LANCZOS)
-    return contained
+    width, height = image.size
+    scale = min(max_width / max(width, 1), max_height / max(height, 1))
+    if not allow_upscale:
+        scale = min(1.0, scale)
+    target_size = (
+        max(1, int(round(width * scale))),
+        max(1, int(round(height * scale))),
+    )
+    if target_size == image.size:
+        return image.copy()
+    return image.resize(target_size, resample=resample)
 
 
 def render_preview_image(
@@ -181,7 +217,7 @@ def render_preview_image(
     *,
     max_size: tuple[int, int],
 ) -> Image.Image:
-    return contain_image(apply_settings(source_image, settings), max_size)
+    return contain_image(apply_settings(source_image, settings), max_size, allow_upscale=True)
 
 
 def render_develop_image(
@@ -192,14 +228,32 @@ def render_develop_image(
 ) -> Image.Image:
     screen_width = max(1, int(screen_size[0]))
     screen_height = max(1, int(screen_size[1]))
-    pre_invert = apply_settings(source_image, settings, include_invert=False)
-    contained = contain_image(pre_invert, (screen_width, screen_height))
+    clean = settings.sanitized()
+    source_fit_size = (
+        (screen_height, screen_width)
+        if clean.rotation_degrees in {90, 270}
+        else (screen_width, screen_height)
+    )
+    source_work = contain_image(
+        source_image,
+        source_fit_size,
+        allow_upscale=False,
+        resample=RESAMPLE_BILINEAR,
+    )
+    pre_invert = apply_geometry(source_work, clean)
+    contained = contain_image(
+        pre_invert,
+        (screen_width, screen_height),
+        allow_upscale=True,
+        resample=RESAMPLE_BILINEAR,
+    )
+    contained = apply_tonal_adjustments(contained, clean, include_invert=False)
     canvas = Image.new("RGB", (screen_width, screen_height), "black")
     offset = (
         (screen_width - contained.width) // 2,
         (screen_height - contained.height) // 2,
     )
     canvas.paste(contained, offset)
-    if settings.sanitized().invert:
+    if clean.invert:
         canvas = ImageOps.invert(canvas)
     return canvas

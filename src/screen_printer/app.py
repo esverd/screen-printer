@@ -11,6 +11,7 @@ from PIL import Image, ImageTk
 from .icons import make_icon
 from .image_ops import (
     ImageSettings,
+    contain_image,
     load_source_image,
     render_develop_image,
     render_preview_image,
@@ -33,6 +34,7 @@ BUTTON_FG = "#f2f5f7"
 MUTED = "#9da9b3"
 ACCENT = "#60c2ff"
 WARNING = "#ffb86b"
+PREVIEW_CACHE_SIZE = (1024, 1024)
 
 
 class Tooltip:
@@ -91,6 +93,7 @@ class ScreenPrinterApp:
 
         self.source_path: Path | None = None
         self.source_image: Image.Image | None = None
+        self.preview_source_image: Image.Image | None = None
         self.settings = ImageSettings()
         self.screen_size = (self.root.winfo_screenwidth(), self.root.winfo_screenheight())
         self.last_sidecar_path: Path | None = None
@@ -203,11 +206,11 @@ class ScreenPrinterApp:
             ("exposure", "exposure", "Exposure", lambda: self.toggle_slider("exposure")),
             ("contrast", "contrast", "Contrast", lambda: self.toggle_slider("contrast")),
             ("blur", "blur", "Blur", lambda: self.toggle_slider("blur")),
-            ("invert", "invert", "Invert", self.toggle_invert),
             ("rotate", "rotate", "Rotate clockwise", self.rotate_clockwise),
             ("flip_h", "flip_h", "Flip horizontal", self.toggle_flip_horizontal),
             ("flip_v", "flip_v", "Flip vertical", self.toggle_flip_vertical),
             ("save", "save", "Save settings", self.save_settings),
+            ("invert", "invert", "Invert", self.toggle_invert),
             ("develop", "camera", "Develop", self.enter_develop_mode),
         ]
         for column, (key, icon_name, tooltip, command) in enumerate(specs):
@@ -317,6 +320,7 @@ class ScreenPrinterApp:
             return
         self.source_path = path
         self.source_image = image
+        self.preview_source_image = contain_image(image, PREVIEW_CACHE_SIZE)
         self.last_sidecar_path = sidecar_path
         self.last_exposure_seconds = None
         self.active_develop_sidecar = None
@@ -434,12 +438,12 @@ class ScreenPrinterApp:
     def _render_preview(self) -> None:
         self._preview_after_id = None
         self.preview.delete("all")
-        if self.source_image is None:
+        if self.preview_source_image is None:
             return
         width = max(1, self.preview.winfo_width())
         height = max(1, self.preview.winfo_height())
         preview = render_preview_image(
-            self.source_image,
+            self.preview_source_image,
             self.settings,
             max_size=(width, height),
         )

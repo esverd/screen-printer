@@ -106,3 +106,18 @@ def test_develop_letterbox_is_black_before_inversion() -> None:
     assert rendered.size == (6, 2)
     assert rendered.getpixel((0, 0)) == (255, 255, 255)
     assert rendered.getpixel((3, 1)) == (0, 0, 0)
+
+
+def test_develop_render_upscales_to_screen_fit() -> None:
+    image = Image.new("RGB", (2, 1), "white")
+
+    rendered = render_develop_image(
+        image,
+        ImageSettings(grayscale=False),
+        screen_size=(8, 8),
+    )
+
+    assert rendered.size == (8, 8)
+    assert rendered.getpixel((0, 2)) == (255, 255, 255)
+    assert rendered.getpixel((7, 5)) == (255, 255, 255)
+    assert rendered.getpixel((0, 0)) == (0, 0, 0)
