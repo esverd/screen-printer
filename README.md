@@ -114,49 +114,87 @@ For the 3.5-inch screen, you can force a small window size:
 SCREEN_PRINTER_GEOMETRY=480x320 ./scripts/run_pi.sh
 ```
 
-## Raspberry Pi Kiosk Workflow
+## Raspberry Pi: No HDMI / SSH Setup
+
+Screen Printer supports two Raspberry Pi setup choices. Regular/manual desktop mode still works and is the safest first install. Kiosk/SPI mode is opt-in for a Pi that should boot into one fullscreen app and scan an image folder without using a file picker.
+
+SSH into the Pi, then from this project folder run one of these paths.
+
+### Choice 1: regular/manual desktop mode
+
+Use this when the Pi has a normal desktop session and you want to launch Screen Printer manually from the desktop/menu:
+
+```bash
+sudo apt update
+sudo apt install -y python3-tk python3-venv
+chmod +x START_SCREEN_PRINTER.command run-screen-printer.sh scripts/*.sh
+./scripts/install_pi.sh
+```
+
+Start it from SSH only if a graphical desktop is already running on the Pi display:
+
+```bash
+DISPLAY=:0 ./scripts/run_pi.sh
+```
+
+Or start with a small-window geometry:
+
+```bash
+DISPLAY=:0 SCREEN_PRINTER_GEOMETRY=480x320 ./scripts/run_pi.sh
+```
+
+### Choice 2: kiosk/SPI autostart mode
 
 Kiosk mode is intended for the SPI screen: boot the Pi, launch one fullscreen Screen Printer app, and avoid desktop icons, taskbars, OS file pickers, terminals, and draggable windows on the small display.
 
-1. Put images in the kiosk folder from another machine or device:
-   - default: `/home/sverd/Pictures/screen-prints/`
-   - copy by SSH/SFTP/Samba/USB; no graphical file picker is needed on the Pi
-2. Start fullscreen kiosk mode:
+The default kiosk image folder is:
 
-```bash
-./scripts/run_kiosk.sh
+```text
+/home/sverd/Pictures/screen-prints
 ```
 
-or directly:
+Copy JPG/PNG images there by SSH/SFTP/Samba/USB. Override the folder with `--image-dir DIR` or `SCREEN_PRINTER_IMAGE_DIR=DIR`.
+
+Install the kiosk autostart service explicitly:
 
 ```bash
-python -m screen_printer --kiosk --image-dir /home/sverd/Pictures/screen-prints
+sudo apt update
+sudo apt install -y python3-tk python3-venv
+chmod +x START_SCREEN_PRINTER.command run-screen-printer.sh scripts/*.sh
+./scripts/install_kiosk_autostart.sh install --yes --image-dir /home/sverd/Pictures/screen-prints
 ```
+
+The installer is intentionally non-destructive: by default it only previews; with `--yes` it writes/enables a user systemd service; it refuses to overwrite an existing service unless you also pass `--force`; it does not reboot or power off.
+
+Useful kiosk commands:
+
+```bash
+# Preview the service file without installing
+./scripts/install_kiosk_autostart.sh print-service --image-dir /home/sverd/Pictures/screen-prints
+
+# Start now, stop, disable, status, logs
+./scripts/install_kiosk_autostart.sh start
+./scripts/install_kiosk_autostart.sh stop
+./scripts/install_kiosk_autostart.sh disable
+./scripts/install_kiosk_autostart.sh status
+./scripts/install_kiosk_autostart.sh logs
+```
+
+Run kiosk mode manually without installing autostart:
+
+```bash
+DISPLAY=:0 ./scripts/run_kiosk.sh --image-dir /home/sverd/Pictures/screen-prints
+```
+
+If you intentionally want the user service to exist while no graphical login is active, read about systemd user lingering first, then run it manually yourself:
+
+```bash
+loginctl enable-linger "$USER"
+```
+
+The installer does not enable lingering automatically. The service is tied to `graphical-session.target` and sets `DISPLAY=:0`/`XAUTHORITY=%h/.Xauthority`, which matches the common Raspberry Pi desktop/X11 case. If your Pi uses a different display server or display number, edit the generated user service accordingly.
 
 In kiosk mode, the folder button opens the in-app image library instead of an OS file picker. The app scans only the top level of the image directory, newest files first, and shows JPG/PNG images plus Screen Printer sidecar JSON files. Tap/click an image to open it, then use the existing large custom controls for grayscale, exposure, contrast, blur, rotate, flip, invert, save, and Develop.
-
-For testing or a different folder:
-
-```bash
-SCREEN_PRINTER_IMAGE_DIR=/tmp/screen-prints ./scripts/run_kiosk.sh
-# or
-python -m screen_printer --kiosk --image-dir /tmp/screen-prints --geometry 480x320
-```
-
-### Optional autostart helper
-
-An opt-in user-systemd helper is included. It prints what it will do by default and only writes/enables the service when passed `--yes`:
-
-```bash
-./scripts/install_kiosk_autostart.sh
-./scripts/install_kiosk_autostart.sh --yes
-```
-
-It refuses to overwrite an existing service. After installing, start now with:
-
-```bash
-systemctl --user start screen-printer-kiosk.service
-```
 
 ## Develop Mode
 
