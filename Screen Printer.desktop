@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Screen Printer
+Comment=Run Screen Printer from this folder
+Exec=sh -c 'cd "$(dirname "$0")" && ./scripts/run_pi.sh' %k
+Icon=applications-graphics
+Terminal=false
+Categories=Graphics;Photography;
+StartupNotify=false

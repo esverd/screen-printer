@@ -66,23 +66,40 @@ On Windows, `python3` and `.venv/bin/activate` usually will not work in PowerShe
 
 ## Raspberry Pi Install
 
-From the project directory:
+### Easiest copy-from-USB flow
+
+1. Copy the whole `screen-printer` folder from the USB stick to the Pi Desktop.
+2. Open the copied folder.
+3. Double-click `Screen Printer.desktop`.
+
+On first run, the launcher creates `.venv` inside the folder and installs Screen Printer there. Later runs reuse that local environment.
+
+If the desktop asks whether to trust/execute the launcher, choose **Execute** or **Trust and Launch**. If double-click is blocked, open a terminal in the folder and run:
 
 ```bash
-chmod +x scripts/install_pi.sh
+chmod +x scripts/run_pi.sh scripts/install_pi.sh "Screen Printer.desktop"
 ./scripts/install_pi.sh
 ```
 
-The installer creates `.venv`, installs the app, and writes desktop launchers to:
+The installer creates launchers in three places:
 
+- `Screen Printer.desktop` inside the project folder
 - `~/Desktop/screen-printer.desktop`
 - `~/.local/share/applications/screen-printer.desktop`
 
-If Tkinter is missing, install it first:
+After that, Screen Printer can be launched from the desktop icon or the Raspberry Pi application menu.
+
+If Tkinter or venv support is missing, install it first:
 
 ```bash
 sudo apt update
-sudo apt install python3-tk
+sudo apt install python3-tk python3-venv
+```
+
+For the 3.5-inch screen, you can force a small window size:
+
+```bash
+SCREEN_PRINTER_GEOMETRY=480x320 ./scripts/run_pi.sh
 ```
 
 ## Develop Mode
