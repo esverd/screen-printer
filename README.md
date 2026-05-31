@@ -17,6 +17,13 @@ Screen Printer is a lightweight Tkinter/Pillow app for showing adjusted image ne
 On Windows PowerShell:
 
 ```powershell
+.\setup.bat
+.\run.bat
+```
+
+Or set up manually:
+
+```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -27,7 +34,7 @@ python -m screen_printer --geometry 480x320
 Run tests:
 
 ```powershell
-python -m pytest
+.\test.bat
 ```
 
 On Linux:
@@ -55,7 +62,7 @@ uv run screen-printer --geometry 480x320
 uv run pytest
 ```
 
-On Windows, `python3` and `.venv/bin/activate` usually will not work in PowerShell. Use `python` and `.\.venv\Scripts\Activate.ps1`, or use the `uv` commands above.
+On Windows, `python3` and `.venv/bin/activate` usually will not work in PowerShell. If script activation is blocked by execution policy, use `.\run.bat` or call `.\.venv\Scripts\python.exe` directly instead of activating the environment.
 
 ## Raspberry Pi Install
 
