@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "screen-printer"
+version = "0.1.0"
+description = "Lightweight screen negative exposure app for small Linux touch displays"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "Pillow>=9.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[project.scripts]
+screen-printer = "screen_printer.app:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+screen_printer = ["assets/material_symbols/*.svg", "assets/material_symbols/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
