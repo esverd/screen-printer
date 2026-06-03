@@ -23,6 +23,6 @@ def test_poweroff_command_default_is_systemd_poweroff() -> None:
 
 
 def test_new_control_icons_render_at_compact_size() -> None:
-    for name in ["fullscreen", "power"]:
+    for name in ["fullscreen", "power", "develop", "contrast", "blur", "flip_h", "flip_v"]:
         icon = make_icon(name, size=26)
         assert icon.size == (26, 26)

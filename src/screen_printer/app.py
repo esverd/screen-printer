@@ -261,7 +261,7 @@ class ScreenPrinterApp:
             ("flip_v", "flip_v", "Flip vertical", self.toggle_flip_vertical),
             ("save", "save", "Save settings", self.save_settings),
             ("invert", "invert", "Invert", self.toggle_invert),
-            ("develop", "camera", "Develop", self.enter_develop_mode),
+            ("develop", "develop", "Develop", self.enter_develop_mode),
             ("power", "power", "Power off", self.show_poweroff_confirm),
         ]
         for column, (key, icon_name, tooltip, command) in enumerate(specs):

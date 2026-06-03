@@ -102,18 +102,16 @@ def _draw_exposure(draw: IconDraw, color: str) -> None:
 
 
 def _draw_contrast(draw: IconDraw, color: str) -> None:
-    draw.line((6, 25, 6, 6, 26, 6), fill=color, width=1)
-    points = [(7, 23), (10, 23), (13, 20), (16, 16), (19, 11), (23, 9), (26, 9)]
-    draw.line(points, fill=color, width=2)
-    for point in (points[0], points[-1]):
-        x, y = point
-        draw.ellipse((x - 2, y - 2, x + 2, y + 2), fill=color)
+    draw.rounded_rectangle((6, 6, 26, 26), radius=3, outline=color, width=2)
+    draw.polygon([(8, 24), (24, 8), (24, 24)], fill=color)
+    draw.line((10, 24, 24, 10), fill=color, width=2)
 
 
 def _draw_blur(draw: IconDraw, color: str) -> None:
-    for y, offset in ((10, 0), (16, 2), (22, 0)):
-        draw.arc((5 + offset, y - 5, 18 + offset, y + 5), start=205, end=335, fill=color, width=2)
-        draw.arc((17 + offset, y - 5, 30 + offset, y + 5), start=25, end=155, fill=color, width=2)
+    draw.ellipse((9, 9, 23, 23), outline=color, width=2)
+    for xy in ((6, 14, 10, 18), (22, 14, 26, 18), (14, 6, 18, 10), (14, 22, 18, 26)):
+        draw.ellipse(xy, fill=color)
+    draw.ellipse((13, 13, 19, 19), fill=color)
 
 
 def _draw_invert(draw: IconDraw, color: str) -> None:
@@ -129,14 +127,18 @@ def _draw_rotate(draw: IconDraw, color: str) -> None:
 
 def _draw_flip_h(draw: IconDraw, color: str) -> None:
     draw.line((16, 5, 16, 27), fill=color, width=2)
-    draw.line((5, 16, 13, 8, 13, 24, 5, 16), fill=color, width=2)
-    draw.line((27, 16, 19, 8, 19, 24, 27, 16), fill=color, width=2)
+    draw.line((6, 16, 13, 16), fill=color, width=2)
+    draw.line((26, 16, 19, 16), fill=color, width=2)
+    draw.polygon([(6, 16), (12, 10), (12, 22)], fill=color)
+    draw.polygon([(26, 16), (20, 10), (20, 22)], fill=color)
 
 
 def _draw_flip_v(draw: IconDraw, color: str) -> None:
     draw.line((5, 16, 27, 16), fill=color, width=2)
-    draw.line((16, 5, 8, 13, 24, 13, 16, 5), fill=color, width=2)
-    draw.line((16, 27, 8, 19, 24, 19, 16, 27), fill=color, width=2)
+    draw.line((16, 6, 16, 13), fill=color, width=2)
+    draw.line((16, 26, 16, 19), fill=color, width=2)
+    draw.polygon([(16, 6), (10, 12), (22, 12)], fill=color)
+    draw.polygon([(16, 26), (10, 20), (22, 20)], fill=color)
 
 
 def _draw_save(draw: IconDraw, color: str) -> None:
@@ -151,6 +153,22 @@ def _draw_camera(draw: IconDraw, color: str) -> None:
     draw.rectangle((10, 7, 17, 11), fill=color)
     draw.ellipse((11, 13, 21, 23), outline=color, width=2)
     draw.ellipse((23, 13, 25, 15), fill=color)
+
+
+def _draw_develop(draw: IconDraw, color: str) -> None:
+    draw.rounded_rectangle((5, 8, 27, 24), radius=2, outline=color, width=2)
+    draw.ellipse((12, 11, 20, 19), outline=color, width=2)
+    for start, end in [
+        ((16, 3), (16, 6)),
+        ((16, 26), (16, 29)),
+        ((2, 16), (5, 16)),
+        ((27, 16), (30, 16)),
+        ((6, 6), (8, 8)),
+        ((24, 24), (26, 26)),
+        ((26, 6), (24, 8)),
+        ((8, 24), (6, 26)),
+    ]:
+        draw.line((*start, *end), fill=color, width=2)
 
 
 def _draw_fullscreen(draw: IconDraw, color: str) -> None:
@@ -182,6 +200,7 @@ DRAWERS = {
     "flip_v": _draw_flip_v,
     "save": _draw_save,
     "camera": _draw_camera,
+    "develop": _draw_develop,
     "fullscreen": _draw_fullscreen,
     "power": _draw_power,
     "reset": _draw_reset,
