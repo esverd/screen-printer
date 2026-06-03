@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Install Kiosk Autostart
+Comment=Install Screen Printer kiosk boot startup
+Exec=/bin/bash -lc 'cd "$(dirname "$1")" && ./INSTALL_KIOSK_AUTOSTART.command' dummy %k
+Icon=preferences-system
+Terminal=true
+Categories=Settings;System;
+StartupNotify=false

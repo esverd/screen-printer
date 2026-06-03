@@ -76,12 +76,16 @@ On Windows, `python3` and `.venv/bin/activate` usually will not work in PowerShe
 
 That is the most reliable mouse-only launcher. It opens a terminal, creates `.venv` inside the folder on first run, installs Screen Printer there, creates/refreshes a Desktop shortcut at `~/Desktop/screen-printer.desktop`, and keeps setup/error messages visible. Later runs reuse that local environment.
 
-There is also a `Screen Printer.desktop` launcher for desktop/menu integration, but if the Raspberry Pi desktop is picky about `.desktop` files, use `START_SCREEN_PRINTER.command` once first. After that, try the generated Desktop shortcut.
+For the SPI screen, double-click `START_SCREEN_PRINTER_KIOSK.command` instead. It starts the app fullscreen, uses the in-app image library, and creates/refreshes a `~/Desktop/screen-printer-kiosk.desktop` shortcut. This is the best manual mouse-only launcher because it avoids the desktop taskbar and OS file picker.
+
+To make the Pi boot into Screen Printer kiosk mode, double-click `INSTALL_KIOSK_AUTOSTART.command` after the regular launcher has successfully installed the Python environment. It installs/replaces the kiosk autostart files with the default image folder and starts the kiosk once immediately.
+
+There are also `.desktop` launchers for desktop/menu integration, but if the Raspberry Pi desktop is picky about `.desktop` files, use the `.command` files once first. After that, try the generated Desktop shortcuts.
 
 If double-click is blocked or nothing appears, open a terminal in the folder and run:
 
 ```bash
-chmod +x START_SCREEN_PRINTER.command run-screen-printer.sh scripts/run_pi.sh scripts/install_pi.sh "Screen Printer.desktop"
+chmod +x START_SCREEN_PRINTER.command START_SCREEN_PRINTER_KIOSK.command INSTALL_KIOSK_AUTOSTART.command run-screen-printer.sh scripts/*.sh "Screen Printer.desktop" "Screen Printer Kiosk.desktop" "Install Kiosk Autostart.desktop"
 ./START_SCREEN_PRINTER.command
 ```
 
@@ -89,17 +93,23 @@ If launch fails, check `screen-printer-launch.log` in the project folder.
 
 The installer creates launchers in three places:
 
+- `START_SCREEN_PRINTER_KIOSK.command` inside the project folder - recommended SPI fullscreen launcher
+- `INSTALL_KIOSK_AUTOSTART.command` inside the project folder - mouse-friendly kiosk boot installer
+- `Screen Printer Kiosk.desktop` inside the project folder
+- `Install Kiosk Autostart.desktop` inside the project folder
+- `~/Desktop/screen-printer-kiosk.desktop`
+
 - `START_SCREEN_PRINTER.command` inside the project folder — recommended double-click launcher
 - `Screen Printer.desktop` inside the project folder
 - `~/Desktop/screen-printer.desktop`
 - `~/.local/share/applications/screen-printer.desktop`
 
-It also creates a mouse-only shutdown launcher:
+It also creates a mouse-only shutdown launcher with a confirmation dialog:
 
 - `Power Off Pi.desktop` inside the project folder
 - `~/Desktop/power-off-pi.desktop`
 
-Double-click **Power Off Pi** to safely shut down immediately before pulling power.
+Double-click **Power Off Pi**, then confirm shutdown before pulling power.
 
 After that, Screen Printer can be launched from the desktop icon or the Raspberry Pi application menu.
 
@@ -172,6 +182,12 @@ sudo apt update
 sudo apt install -y python3-tk python3-venv
 chmod +x START_SCREEN_PRINTER.command run-screen-printer.sh scripts/*.sh
 ./scripts/install_kiosk_autostart.sh install --yes --image-dir /home/sverd/Pictures/screen-prints
+```
+
+Mouse-only equivalent after a successful first launch:
+
+```text
+Double-click INSTALL_KIOSK_AUTOSTART.command
 ```
 
 The installer is intentionally non-destructive: by default it only previews; with `--yes` it writes/enables a user systemd service and a desktop autostart file at `~/.config/autostart/screen-printer-kiosk.desktop`; it refuses to overwrite existing autostart files unless you also pass `--force`; it does not reboot or power off.

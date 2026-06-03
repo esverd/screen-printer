@@ -17,11 +17,14 @@ cd "$APP_DIR" || exit 1
   echo "PATH=$PATH"
   echo
 
-  chmod +x "$APP_DIR/scripts/run_pi.sh" "$APP_DIR/run-screen-printer.sh" "$APP_DIR/START_SCREEN_PRINTER.command" "$APP_DIR/Screen Printer.desktop" 2>/dev/null || true
+  chmod +x "$APP_DIR/scripts/run_pi.sh" "$APP_DIR/scripts/run_kiosk.sh" "$APP_DIR/scripts/install_kiosk_autostart.sh" "$APP_DIR/scripts/confirm_poweroff.sh" "$APP_DIR/run-screen-printer.sh" "$APP_DIR/START_SCREEN_PRINTER.command" "$APP_DIR/START_SCREEN_PRINTER_KIOSK.command" "$APP_DIR/INSTALL_KIOSK_AUTOSTART.command" "$APP_DIR/Screen Printer.desktop" "$APP_DIR/Screen Printer Kiosk.desktop" "$APP_DIR/Install Kiosk Autostart.desktop" "$APP_DIR/Power Off Pi.desktop" 2>/dev/null || true
 
   if [ -d "$DESKTOP_DIR" ]; then
     cp "$APP_DIR/Screen Printer.desktop" "$DESKTOP_DIR/screen-printer.desktop" 2>/dev/null || true
-    chmod +x "$DESKTOP_DIR/screen-printer.desktop" 2>/dev/null || true
+    cp "$APP_DIR/Screen Printer Kiosk.desktop" "$DESKTOP_DIR/screen-printer-kiosk.desktop" 2>/dev/null || true
+    cp "$APP_DIR/Install Kiosk Autostart.desktop" "$DESKTOP_DIR/install-kiosk-autostart.desktop" 2>/dev/null || true
+    cp "$APP_DIR/Power Off Pi.desktop" "$DESKTOP_DIR/power-off-pi.desktop" 2>/dev/null || true
+    chmod +x "$DESKTOP_DIR/screen-printer.desktop" "$DESKTOP_DIR/screen-printer-kiosk.desktop" "$DESKTOP_DIR/install-kiosk-autostart.desktop" "$DESKTOP_DIR/power-off-pi.desktop" 2>/dev/null || true
   fi
 
   if [ ! -x "$APP_DIR/scripts/run_pi.sh" ]; then

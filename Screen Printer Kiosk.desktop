@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Screen Printer Kiosk
+Comment=Run Screen Printer fullscreen kiosk mode from this folder
+Exec=/bin/bash -lc 'cd "$(dirname "$1")" && ./START_SCREEN_PRINTER_KIOSK.command' dummy %k
+Icon=applications-graphics
+Terminal=true
+Categories=Graphics;Photography;
+StartupNotify=false

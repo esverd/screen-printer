@@ -10,10 +10,32 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTALL_KIOSK = ROOT / "scripts" / "install_kiosk_autostart.sh"
+CONFIRM_POWEROFF = ROOT / "scripts" / "confirm_poweroff.sh"
 RUN_KIOSK = ROOT / "scripts" / "run_kiosk.sh"
 RUN_PI = ROOT / "scripts" / "run_pi.sh"
 INSTALL_PI = ROOT / "scripts" / "install_pi.sh"
-BASH = shutil.which("bash")
+START_COMMAND = ROOT / "START_SCREEN_PRINTER.command"
+START_KIOSK_COMMAND = ROOT / "START_SCREEN_PRINTER_KIOSK.command"
+INSTALL_KIOSK_COMMAND = ROOT / "INSTALL_KIOSK_AUTOSTART.command"
+
+
+def find_usable_bash() -> str | None:
+    candidate = shutil.which("bash")
+    if candidate is None:
+        return None
+    try:
+        subprocess.run(
+            [candidate, "--version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return candidate
+
+
+BASH = find_usable_bash()
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required for Pi shell script tests")
 
@@ -34,7 +56,16 @@ def run_script(*args: str, env: dict[str, str] | None = None) -> subprocess.Comp
 
 
 def test_shell_scripts_parse() -> None:
-    for script in [INSTALL_KIOSK, RUN_KIOSK, RUN_PI, INSTALL_PI]:
+    for script in [
+        INSTALL_KIOSK,
+        CONFIRM_POWEROFF,
+        RUN_KIOSK,
+        RUN_PI,
+        INSTALL_PI,
+        START_COMMAND,
+        START_KIOSK_COMMAND,
+        INSTALL_KIOSK_COMMAND,
+    ]:
         subprocess.run([BASH or "bash", "-n", str(script)], cwd=ROOT, check=True)
 
 
