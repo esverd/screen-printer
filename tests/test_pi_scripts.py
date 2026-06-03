@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,6 +13,9 @@ INSTALL_KIOSK = ROOT / "scripts" / "install_kiosk_autostart.sh"
 RUN_KIOSK = ROOT / "scripts" / "run_kiosk.sh"
 RUN_PI = ROOT / "scripts" / "run_pi.sh"
 INSTALL_PI = ROOT / "scripts" / "install_pi.sh"
+BASH = shutil.which("bash")
+
+pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required for Pi shell script tests")
 
 
 def run_script(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -17,7 +23,7 @@ def run_script(*args: str, env: dict[str, str] | None = None) -> subprocess.Comp
     if env:
         merged_env.update(env)
     return subprocess.run(
-        [str(INSTALL_KIOSK), *args],
+        [BASH or "bash", str(INSTALL_KIOSK), *args],
         cwd=ROOT,
         env=merged_env,
         text=True,
@@ -29,7 +35,7 @@ def run_script(*args: str, env: dict[str, str] | None = None) -> subprocess.Comp
 
 def test_shell_scripts_parse() -> None:
     for script in [INSTALL_KIOSK, RUN_KIOSK, RUN_PI, INSTALL_PI]:
-        subprocess.run(["bash", "-n", str(script)], cwd=ROOT, check=True)
+        subprocess.run([BASH or "bash", "-n", str(script)], cwd=ROOT, check=True)
 
 
 def test_print_service_uses_configured_image_dir_and_graphical_target(tmp_path: Path) -> None:
@@ -43,6 +49,16 @@ def test_print_service_uses_configured_image_dir_and_graphical_target(tmp_path: 
     assert "After=graphical-session.target" in result.stdout
     assert "SCREEN_PRINTER_IMAGE_DIR=" in result.stdout
     assert str(image_dir).replace(" ", "\\ ") in result.stdout
+
+
+def test_print_autostart_launches_kiosk_with_configured_image_dir(tmp_path: Path) -> None:
+    image_dir = tmp_path / "screen prints"
+    result = run_script("print-autostart", "--image-dir", str(image_dir))
+
+    assert "Name=Screen Printer Kiosk" in result.stdout
+    assert "scripts/run_kiosk.sh" in result.stdout
+    assert "SCREEN_PRINTER_IMAGE_DIR=" in result.stdout
+    assert str(image_dir) in result.stdout
 
 
 def test_install_dry_run_does_not_write_service_or_image_dir(tmp_path: Path) -> None:
@@ -61,7 +77,9 @@ def test_install_dry_run_does_not_write_service_or_image_dir(tmp_path: Path) -> 
     )
 
     assert "Would write service" in result.stdout
+    assert "Would write desktop autostart" in result.stdout
     assert not (xdg / "systemd" / "user" / "screen-printer-kiosk.service").exists()
+    assert not (xdg / "autostart" / "screen-printer-kiosk.desktop").exists()
     assert not image_dir.exists()
 
 
@@ -75,3 +93,4 @@ def test_install_preview_is_default_and_does_not_write(tmp_path: Path) -> None:
     assert "Dry preview only" in result.stdout
     assert "install --yes" in result.stdout
     assert not (xdg / "systemd" / "user" / "screen-printer-kiosk.service").exists()
+    assert not (xdg / "autostart" / "screen-printer-kiosk.desktop").exists()

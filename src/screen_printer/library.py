@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 
 IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png"})
@@ -18,7 +19,13 @@ class LibraryItem:
 
 def image_directory_from_env(value: str | None) -> Path:
     if value and value.strip():
-        return Path(value).expanduser()
+        raw = value.strip()
+        if raw == "~" or raw.startswith("~/") or raw.startswith("~\\"):
+            home = os.environ.get("HOME")
+            if home:
+                suffix = raw[2:] if len(raw) > 1 else ""
+                return Path(home) / suffix
+        return Path(raw).expanduser()
     return DEFAULT_KIOSK_IMAGE_DIR
 
 

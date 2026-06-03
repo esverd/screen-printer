@@ -9,6 +9,8 @@ Screen Printer is a lightweight Tkinter/Pillow app for showing adjusted image ne
 - Exposure, contrast, and blur sliders.
 - Invert, rotate clockwise, horizontal flip, and vertical flip toggles.
 - Full-screen Develop mode that hides the editor and mouse cursor.
+- Full-screen editor/kiosk surface that hides the desktop taskbar while keeping controls visible.
+- Confirmed in-app power-off control for dedicated Pi use.
 - Triple-click or press Escape in Develop mode to show the exit confirmation.
 - Versioned JSON sidecar files for settings and exposure metadata.
 
@@ -114,6 +116,12 @@ For the 3.5-inch screen, you can force a small window size:
 SCREEN_PRINTER_GEOMETRY=480x320 ./scripts/run_pi.sh
 ```
 
+Or hide the desktop taskbar while keeping the editor controls visible:
+
+```bash
+DISPLAY=:0 ./scripts/run_pi.sh --fullscreen
+```
+
 ## Raspberry Pi: No HDMI / SSH Setup
 
 Screen Printer supports two Raspberry Pi setup choices. Regular/manual desktop mode still works and is the safest first install. Kiosk/SPI mode is opt-in for a Pi that should boot into one fullscreen app and scan an image folder without using a file picker.
@@ -147,6 +155,8 @@ DISPLAY=:0 SCREEN_PRINTER_GEOMETRY=480x320 ./scripts/run_pi.sh
 
 Kiosk mode is intended for the SPI screen: boot the Pi, launch one fullscreen Screen Printer app, and avoid desktop icons, taskbars, OS file pickers, terminals, and draggable windows on the small display.
 
+For boot-to-app behavior on Raspberry Pi OS, the Pi user must log into a graphical desktop session automatically. In Raspberry Pi Configuration, set **Boot / Auto Login** to **Desktop Autologin**. Without desktop auto-login, the app cannot appear on the SPI display until a graphical session starts.
+
 The default kiosk image folder is:
 
 ```text
@@ -164,13 +174,16 @@ chmod +x START_SCREEN_PRINTER.command run-screen-printer.sh scripts/*.sh
 ./scripts/install_kiosk_autostart.sh install --yes --image-dir /home/sverd/Pictures/screen-prints
 ```
 
-The installer is intentionally non-destructive: by default it only previews; with `--yes` it writes/enables a user systemd service; it refuses to overwrite an existing service unless you also pass `--force`; it does not reboot or power off.
+The installer is intentionally non-destructive: by default it only previews; with `--yes` it writes/enables a user systemd service and a desktop autostart file at `~/.config/autostart/screen-printer-kiosk.desktop`; it refuses to overwrite existing autostart files unless you also pass `--force`; it does not reboot or power off.
 
 Useful kiosk commands:
 
 ```bash
 # Preview the service file without installing
 ./scripts/install_kiosk_autostart.sh print-service --image-dir /home/sverd/Pictures/screen-prints
+
+# Preview the desktop autostart file without installing
+./scripts/install_kiosk_autostart.sh print-autostart --image-dir /home/sverd/Pictures/screen-prints
 
 # Start now, stop, disable, status, logs
 ./scripts/install_kiosk_autostart.sh start
@@ -186,6 +199,8 @@ Run kiosk mode manually without installing autostart:
 DISPLAY=:0 ./scripts/run_kiosk.sh --image-dir /home/sverd/Pictures/screen-prints
 ```
 
+Kiosk mode opens the editor fullscreen, so the desktop taskbar should not consume screen space. The fullscreen toolbar button toggles this same editor fullscreen state in regular mode. Develop mode remains separate: it still shows only the rendered exposure image and uses the triple-click/Escape confirmation to exit.
+
 If you intentionally want the user service to exist while no graphical login is active, read about systemd user lingering first, then run it manually yourself:
 
 ```bash
@@ -194,7 +209,7 @@ loginctl enable-linger "$USER"
 
 The installer does not enable lingering automatically. The service is tied to `graphical-session.target` and sets `DISPLAY=:0`/`XAUTHORITY=%h/.Xauthority`, which matches the common Raspberry Pi desktop/X11 case. If your Pi uses a different display server or display number, edit the generated user service accordingly.
 
-In kiosk mode, the folder button opens the in-app image library instead of an OS file picker. The app scans only the top level of the image directory, newest files first, and shows JPG/PNG images plus Screen Printer sidecar JSON files. Tap/click an image to open it, then use the existing large custom controls for grayscale, exposure, contrast, blur, rotate, flip, invert, save, and Develop.
+In kiosk mode, the folder button opens the in-app image library instead of an OS file picker. The app scans only the top level of the image directory, newest files first, and shows JPG/PNG images plus Screen Printer sidecar JSON files. Tap/click an image to open it, then use the compact custom controls for fullscreen, grayscale, exposure, contrast, blur, rotate, flip, invert, save, Develop, and confirmed power off.
 
 ## Develop Mode
 

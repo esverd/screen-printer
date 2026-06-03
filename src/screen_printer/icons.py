@@ -153,6 +153,18 @@ def _draw_camera(draw: IconDraw, color: str) -> None:
     draw.ellipse((23, 13, 25, 15), fill=color)
 
 
+def _draw_fullscreen(draw: IconDraw, color: str) -> None:
+    draw.line((5, 13, 5, 5, 13, 5), fill=color, width=3)
+    draw.line((19, 5, 27, 5, 27, 13), fill=color, width=3)
+    draw.line((27, 19, 27, 27, 19, 27), fill=color, width=3)
+    draw.line((13, 27, 5, 27, 5, 19), fill=color, width=3)
+
+
+def _draw_power(draw: IconDraw, color: str) -> None:
+    draw.line((16, 5, 16, 16), fill=color, width=3)
+    draw.arc((7, 9, 25, 28), start=130, end=410, fill=color, width=3)
+
+
 def _draw_reset(draw: IconDraw, color: str) -> None:
     draw.arc((7, 7, 26, 26), start=45, end=330, fill=color, width=3)
     draw.polygon([(10, 7), (17, 6), (14, 13)], fill=color)
@@ -170,6 +182,8 @@ DRAWERS = {
     "flip_v": _draw_flip_v,
     "save": _draw_save,
     "camera": _draw_camera,
+    "fullscreen": _draw_fullscreen,
+    "power": _draw_power,
     "reset": _draw_reset,
 }
 

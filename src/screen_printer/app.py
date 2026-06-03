@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 import tkinter as tk
@@ -36,7 +38,10 @@ BUTTON_FG = "#f2f5f7"
 MUTED = "#9da9b3"
 ACCENT = "#60c2ff"
 WARNING = "#ffb86b"
+POWER_BG = "#4b2930"
+POWER_ACTIVE = "#713d48"
 PREVIEW_CACHE_SIZE = (1024, 1024)
+DEFAULT_POWEROFF_COMMAND = "systemctl poweroff"
 
 
 class Tooltip:
@@ -91,6 +96,7 @@ class ScreenPrinterApp:
         *,
         initial_geometry: str | None = None,
         kiosk: bool = False,
+        fullscreen: bool = False,
         image_dir: Path | None = None,
         scan_limit: int = 200,
     ) -> None:
@@ -98,6 +104,7 @@ class ScreenPrinterApp:
         self.root.title("Screen Printer")
         self.root.configure(bg=BG)
         self.kiosk = kiosk
+        self.fullscreen = fullscreen or kiosk
         self.image_dir = image_dir or DEFAULT_KIOSK_IMAGE_DIR
         self.scan_limit = scan_limit
         self.library_items: list[LibraryItem] = []
@@ -105,8 +112,17 @@ class ScreenPrinterApp:
         self.root.minsize(360, 240)
         if initial_geometry:
             self.root.geometry(initial_geometry)
+        self._screen_width = self.root.winfo_screenwidth()
+        self._screen_height = self.root.winfo_screenheight()
+        self.compact_ui = min(self._screen_width, self._screen_height) <= 480
+        self.control_icon_size = 26 if self.compact_ui else 32
+        self.control_height = 38 if self.compact_ui else 46
+        self.panel_height = 44 if self.compact_ui else 52
+        self.gallery_thumb_size = (60, 45) if self.compact_ui else (72, 54)
+        self.gallery_header_height = 38 if self.compact_ui else 44
+        if self.fullscreen:
+            self._set_fullscreen(True)
         if self.kiosk:
-            self.root.attributes("-fullscreen", True)
             self.root.configure(cursor="arrow")
 
         self.source_path: Path | None = None
@@ -126,6 +142,7 @@ class ScreenPrinterApp:
         self._active_slider: str | None = None
         self._develop_window: tk.Toplevel | None = None
         self._confirm_window: tk.Toplevel | None = None
+        self._power_confirm_window: tk.Toplevel | None = None
         self._confirm_after_id: str | None = None
         self._cursor_trap_after_id: str | None = None
         self._timer = DevelopSessionTimer()
@@ -140,8 +157,9 @@ class ScreenPrinterApp:
 
         self._build_ui()
         self.root.bind("<Configure>", self._schedule_preview, add="+")
+        self.root.bind("<F11>", lambda _event: self.toggle_fullscreen(), add="+")
+        self.root.bind("<Escape>", lambda _event: self._set_fullscreen(False), add="+")
         if self.kiosk:
-            self.root.bind("<Escape>", lambda _event: self.root.attributes("-fullscreen", False), add="+")
             self.root.after(50, self.show_gallery)
 
     def _build_ui(self) -> None:
@@ -158,8 +176,9 @@ class ScreenPrinterApp:
         )
         self.preview.grid(row=0, column=0, sticky="nsew")
 
-        self.slider_frame = tk.Frame(self.root, bg=PANEL_BG, height=52)
+        self.slider_frame = tk.Frame(self.root, bg=PANEL_BG, height=self.panel_height)
         self.slider_frame.grid(row=1, column=0, sticky="ew")
+        self.slider_frame.grid_propagate(False)
         self.slider_frame.grid_remove()
         self.slider_frame.grid_columnconfigure(1, weight=1)
 
@@ -169,9 +188,9 @@ class ScreenPrinterApp:
             bg=PANEL_BG,
             fg=BUTTON_FG,
             width=4,
-            font=("TkDefaultFont", 15, "bold"),
+            font=("TkDefaultFont", 12 if self.compact_ui else 15, "bold"),
         )
-        self.slider_title.grid(row=0, column=0, padx=(4, 2), pady=6)
+        self.slider_title.grid(row=0, column=0, padx=(3, 1), pady=4)
 
         self.slider_value = tk.DoubleVar(value=0.0)
         self.slider = tk.Scale(
@@ -185,8 +204,10 @@ class ScreenPrinterApp:
             activebackground=ACCENT,
             highlightthickness=0,
             command=self._on_slider_changed,
+            width=16 if self.compact_ui else 18,
+            sliderlength=22 if self.compact_ui else 30,
         )
-        self.slider.grid(row=0, column=1, sticky="ew", padx=2, pady=5)
+        self.slider.grid(row=0, column=1, sticky="ew", padx=1, pady=3)
 
         self.slider_readout = tk.Label(
             self.slider_frame,
@@ -194,18 +215,18 @@ class ScreenPrinterApp:
             bg=PANEL_BG,
             fg=BUTTON_FG,
             width=5,
-            font=("TkDefaultFont", 12, "bold"),
+            font=("TkDefaultFont", 10 if self.compact_ui else 12, "bold"),
         )
-        self.slider_readout.grid(row=0, column=2, padx=2, pady=6)
+        self.slider_readout.grid(row=0, column=2, padx=1, pady=4)
 
         self.reset_button = self._button(
             self.slider_frame,
             "reset",
             "Reset slider",
             self._reset_active_slider,
-            min_width=44,
+            min_width=self.control_height,
         )
-        self.reset_button.grid(row=0, column=3, padx=(2, 6), pady=5, sticky="nsew")
+        self.reset_button.grid(row=0, column=3, padx=(1, 4), pady=4, sticky="nsew")
 
         self.meta = tk.Label(
             self.root,
@@ -213,20 +234,22 @@ class ScreenPrinterApp:
             bg=BG,
             fg=MUTED,
             anchor="w",
-            padx=8,
-            pady=2,
-            font=("TkDefaultFont", 9),
+            padx=6,
+            pady=1,
+            font=("TkDefaultFont", 8 if self.compact_ui else 9),
         )
         self.meta.grid(row=2, column=0, sticky="ew")
 
-        self.controls = tk.Frame(self.root, bg=PANEL_BG, height=52)
+        self.controls = tk.Frame(self.root, bg=PANEL_BG, height=self.panel_height)
         self.controls.grid(row=3, column=0, sticky="ew")
-        for column in range(11):
+        self.controls.grid_propagate(False)
+        for column in range(13):
             self.controls.grid_columnconfigure(column, weight=1, uniform="controls")
 
         self.buttons: dict[str, tk.Button] = {}
         specs = [
             ("open", "folder", "Image library" if self.kiosk else "Open image or sidecar", self.show_gallery if self.kiosk else self.open_image_dialog),
+            ("fullscreen", "fullscreen", "Toggle fullscreen editor", self.toggle_fullscreen),
             ("bw", "grayscale", "Toggle grayscale", self.toggle_grayscale),
             ("exposure", "exposure", "Exposure", lambda: self.toggle_slider("exposure")),
             ("contrast", "contrast", "Contrast", lambda: self.toggle_slider("contrast")),
@@ -237,13 +260,26 @@ class ScreenPrinterApp:
             ("save", "save", "Save settings", self.save_settings),
             ("invert", "invert", "Invert", self.toggle_invert),
             ("develop", "camera", "Develop", self.enter_develop_mode),
+            ("power", "power", "Power off", self.show_poweroff_confirm),
         ]
         for column, (key, icon_name, tooltip, command) in enumerate(specs):
             button = self._button(self.controls, icon_name, tooltip, command, key=key)
-            button.grid(row=0, column=column, padx=1, pady=4, sticky="nsew")
+            button.grid(row=0, column=column, padx=1, pady=3, sticky="nsew")
             self.buttons[key] = button
 
         self._update_button_states()
+
+    def _set_fullscreen(self, enabled: bool) -> None:
+        self.fullscreen = enabled
+        try:
+            self.root.attributes("-fullscreen", enabled)
+        except tk.TclError:
+            return
+        if hasattr(self, "buttons"):
+            self._update_button_states()
+
+    def toggle_fullscreen(self) -> None:
+        self._set_fullscreen(not self.fullscreen)
 
     def _build_gallery_ui(self) -> None:
         if self.gallery_frame is not None:
@@ -253,8 +289,9 @@ class ScreenPrinterApp:
         frame.grid_rowconfigure(1, weight=1)
         frame.grid_columnconfigure(0, weight=1)
 
-        header = tk.Frame(frame, bg=PANEL_BG, height=44)
+        header = tk.Frame(frame, bg=PANEL_BG, height=self.gallery_header_height)
         header.grid(row=0, column=0, sticky="ew")
+        header.grid_propagate(False)
         header.grid_columnconfigure(0, weight=1)
         self.gallery_title = tk.Label(
             header,
@@ -262,10 +299,10 @@ class ScreenPrinterApp:
             bg=PANEL_BG,
             fg=BUTTON_FG,
             anchor="w",
-            padx=8,
-            font=("TkDefaultFont", 14, "bold"),
+            padx=6,
+            font=("TkDefaultFont", 11 if self.compact_ui else 14, "bold"),
         )
-        self.gallery_title.grid(row=0, column=0, sticky="ew", pady=7)
+        self.gallery_title.grid(row=0, column=0, sticky="ew", pady=5)
         refresh = tk.Button(
             header,
             text="↻",
@@ -276,10 +313,10 @@ class ScreenPrinterApp:
             activeforeground=BUTTON_FG,
             relief="flat",
             bd=0,
-            font=("TkDefaultFont", 16, "bold"),
+            font=("TkDefaultFont", 13 if self.compact_ui else 16, "bold"),
             width=3,
         )
-        refresh.grid(row=0, column=1, padx=4, pady=4)
+        refresh.grid(row=0, column=1, padx=3, pady=3)
 
         canvas = tk.Canvas(frame, bg=BG, bd=0, highlightthickness=0)
         up = tk.Button(
@@ -292,7 +329,7 @@ class ScreenPrinterApp:
             activeforeground=BUTTON_FG,
             relief="flat",
             bd=0,
-            font=("TkDefaultFont", 12, "bold"),
+            font=("TkDefaultFont", 10 if self.compact_ui else 12, "bold"),
             width=3,
         )
         down = tk.Button(
@@ -305,11 +342,11 @@ class ScreenPrinterApp:
             activeforeground=BUTTON_FG,
             relief="flat",
             bd=0,
-            font=("TkDefaultFont", 12, "bold"),
+            font=("TkDefaultFont", 10 if self.compact_ui else 12, "bold"),
             width=3,
         )
-        up.grid(row=0, column=2, padx=(0, 4), pady=4)
-        down.grid(row=0, column=3, padx=(0, 4), pady=4)
+        up.grid(row=0, column=2, padx=(0, 3), pady=3)
+        down.grid(row=0, column=3, padx=(0, 3), pady=3)
         if not self.kiosk:
             close = tk.Button(
                 header,
@@ -321,10 +358,10 @@ class ScreenPrinterApp:
                 activeforeground=BUTTON_FG,
                 relief="flat",
                 bd=0,
-                font=("TkDefaultFont", 16, "bold"),
+                font=("TkDefaultFont", 13 if self.compact_ui else 16, "bold"),
                 width=3,
             )
-            close.grid(row=0, column=4, padx=(0, 4), pady=4)
+            close.grid(row=0, column=4, padx=(0, 3), pady=3)
 
         canvas.grid(row=1, column=0, sticky="nsew")
         inner = tk.Frame(canvas, bg=BG)
@@ -381,8 +418,9 @@ class ScreenPrinterApp:
         row = tk.Frame(self.gallery_inner, bg=BUTTON_BG, bd=0, highlightthickness=1, highlightbackground="#0a0e12")
         row.pack(fill="x", padx=4, pady=3)
         row.grid_columnconfigure(1, weight=1)
-        thumb_label = tk.Label(row, bg="#05070a", width=72, height=54)
-        thumb_label.grid(row=0, column=0, padx=5, pady=5)
+        thumb_width, thumb_height = self.gallery_thumb_size
+        thumb_label = tk.Label(row, bg="#05070a", width=thumb_width, height=thumb_height)
+        thumb_label.grid(row=0, column=0, padx=4, pady=4)
         thumb = self._make_thumbnail(item.path)
         if thumb is not None:
             thumb_label.configure(image=thumb)
@@ -398,7 +436,7 @@ class ScreenPrinterApp:
             fg=BUTTON_FG,
             justify="left",
             anchor="w",
-            font=("TkDefaultFont", 11, "bold"),
+            font=("TkDefaultFont", 10 if self.compact_ui else 11, "bold"),
         )
         label.grid(row=0, column=1, sticky="ew", padx=(0, 5), pady=5)
         command = lambda path=item.path: self._select_library_path(path)
@@ -410,10 +448,11 @@ class ScreenPrinterApp:
             return None
         try:
             image = load_source_image(path)
-            image.thumbnail((72, 54))
-            canvas = Image.new("RGB", (72, 54), "#05070a")
-            left = (72 - image.width) // 2
-            top = (54 - image.height) // 2
+            thumb_width, thumb_height = self.gallery_thumb_size
+            image.thumbnail((thumb_width, thumb_height))
+            canvas = Image.new("RGB", (thumb_width, thumb_height), "#05070a")
+            left = (thumb_width - image.width) // 2
+            top = (thumb_height - image.height) // 2
             canvas.paste(image.convert("RGB"), (left, top))
         except Exception:
             return None
@@ -438,7 +477,7 @@ class ScreenPrinterApp:
         icon_key = f"{icon_name}:{BUTTON_FG}"
         icon = self._button_icons.get(icon_key)
         if icon is None:
-            icon = ImageTk.PhotoImage(make_icon(icon_name, color=BUTTON_FG))
+            icon = ImageTk.PhotoImage(make_icon(icon_name, size=self.control_icon_size, color=BUTTON_FG))
             self._button_icons[icon_key] = icon
         button = tk.Button(
             parent,
@@ -453,12 +492,12 @@ class ScreenPrinterApp:
             highlightbackground=BUTTON_BG,
             highlightcolor=BUTTON_BORDER,
             highlightthickness=2,
-            font=("TkDefaultFont", 14, "bold"),
+            font=("TkDefaultFont", 12 if self.compact_ui else 14, "bold"),
             padx=0,
             pady=0,
             takefocus=True,
         )
-        button.configure(width=max(34, min_width - 8), height=42)
+        button.configure(width=max(28, min_width - 8), height=self.control_height)
         self._button_keys[button] = key
         button.bind("<Enter>", lambda _event, item=button: self._set_button_hover(item, True), add="+")
         button.bind("<Leave>", lambda _event, item=button: self._set_button_hover(item, False), add="+")
@@ -561,6 +600,7 @@ class ScreenPrinterApp:
 
     def _update_button_states(self) -> None:
         active = {
+            "fullscreen": self.fullscreen,
             "bw": self.settings.grayscale,
             "invert": self.settings.invert,
             "flip_h": self.settings.flip_horizontal,
@@ -571,6 +611,11 @@ class ScreenPrinterApp:
         }
         for key, button in self.buttons.items():
             self._style_button(button, active=active.get(key, False))
+        if "power" in self.buttons:
+            self.buttons["power"].configure(
+                bg=POWER_ACTIVE if self.buttons["power"] in self._hovered_buttons else POWER_BG,
+                activebackground=POWER_ACTIVE,
+            )
         if hasattr(self, "reset_button"):
             self._style_button(self.reset_button)
 
@@ -599,6 +644,82 @@ class ScreenPrinterApp:
             self.slider.set(self.settings.blur_radius)
         self.slider_readout.configure(text=self._format_slider_value(float(self.slider.get())))
         self._update_button_states()
+
+    def show_poweroff_confirm(self) -> None:
+        if self._power_confirm_window is not None:
+            self._power_confirm_window.lift()
+            return
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Power off")
+        dialog.configure(bg="#05070a")
+        dialog.transient(self.root)
+        dialog.attributes("-topmost", self.fullscreen or self.kiosk)
+        dialog.resizable(False, False)
+        dialog.protocol("WM_DELETE_WINDOW", self._cancel_poweroff_confirm)
+
+        tk.Label(
+            dialog,
+            text="Power off?",
+            bg="#05070a",
+            fg=BUTTON_FG,
+            font=("TkDefaultFont", 14 if self.compact_ui else 16, "bold"),
+            padx=12,
+            pady=10,
+        ).grid(row=0, column=0, columnspan=2, sticky="ew")
+        cancel = tk.Button(
+            dialog,
+            text="Cancel",
+            command=self._cancel_poweroff_confirm,
+            bg=BUTTON_BG,
+            fg=BUTTON_FG,
+            activebackground=BUTTON_ACTIVE,
+            activeforeground=BUTTON_FG,
+            relief="flat",
+            bd=0,
+            font=("TkDefaultFont", 11 if self.compact_ui else 12, "bold"),
+        )
+        power = tk.Button(
+            dialog,
+            text="Power off",
+            command=self._poweroff_now,
+            bg=POWER_BG,
+            fg=BUTTON_FG,
+            activebackground=POWER_ACTIVE,
+            activeforeground=BUTTON_FG,
+            relief="flat",
+            bd=0,
+            font=("TkDefaultFont", 11 if self.compact_ui else 12, "bold"),
+        )
+        cancel.grid(row=1, column=0, sticky="nsew", padx=(8, 4), pady=(0, 8), ipadx=10, ipady=8)
+        power.grid(row=1, column=1, sticky="nsew", padx=(4, 8), pady=(0, 8), ipadx=10, ipady=8)
+        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_columnconfigure(1, weight=1)
+        self._power_confirm_window = dialog
+        dialog.update_idletasks()
+        width = min(280, max(220, dialog.winfo_reqwidth()))
+        height = dialog.winfo_reqheight()
+        left = max(0, self.root.winfo_rootx() + (self.root.winfo_width() - width) // 2)
+        top = max(0, self.root.winfo_rooty() + (self.root.winfo_height() - height) // 2)
+        dialog.geometry(f"{width}x{height}+{left}+{top}")
+        dialog.grab_set()
+        cancel.focus_set()
+
+    def _cancel_poweroff_confirm(self) -> None:
+        if self._power_confirm_window is not None:
+            try:
+                self._power_confirm_window.grab_release()
+            except tk.TclError:
+                pass
+            self._power_confirm_window.destroy()
+            self._power_confirm_window = None
+
+    def _poweroff_now(self) -> None:
+        command = os.environ.get("SCREEN_PRINTER_POWEROFF_COMMAND", DEFAULT_POWEROFF_COMMAND)
+        try:
+            subprocess.Popen(shlex.split(command, posix=os.name != "nt"))
+        except Exception as exc:  # pragma: no cover - platform command wrapper
+            self._cancel_poweroff_confirm()
+            messagebox.showerror("Power off", f"Could not run '{command}': {exc}")
 
     def _reset_active_slider(self) -> None:
         if self._active_slider == "blur":
@@ -915,6 +1036,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--image", type=Path, help="Image to load on startup")
     parser.add_argument("--kiosk", action="store_true", help="Start fullscreen with the in-app image library")
     parser.add_argument(
+        "--fullscreen",
+        action="store_true",
+        help="Start the editor fullscreen while keeping the normal controls visible",
+    )
+    parser.add_argument(
         "--image-dir",
         type=Path,
         default=None,
@@ -940,6 +1066,7 @@ def main(argv: list[str] | None = None) -> int:
         root,
         initial_geometry=args.geometry,
         kiosk=args.kiosk,
+        fullscreen=args.fullscreen,
         image_dir=image_dir,
         scan_limit=args.scan_limit,
     )
