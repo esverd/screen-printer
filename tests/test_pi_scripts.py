@@ -30,6 +30,12 @@ def find_usable_bash() -> str | None:
             stderr=subprocess.DEVNULL,
             check=True,
         )
+        subprocess.run(
+            [candidate, "-n", str(INSTALL_KIOSK)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
     except (OSError, subprocess.CalledProcessError):
         return None
     return candidate

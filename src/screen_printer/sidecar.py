@@ -37,6 +37,13 @@ def _safe_resolved_path(path: Path) -> Path:
         return path
 
 
+def _payload_int(payload: dict[str, Any], key: str) -> int | None:
+    try:
+        return int(payload.get(key))
+    except (TypeError, ValueError):
+        return None
+
+
 @dataclass(frozen=True, slots=True)
 class DevelopSessionMetadata:
     started_at_utc: str
@@ -102,6 +109,7 @@ def build_sidecar_payload(
         },
         "settings": settings.sanitized().to_dict(),
         "develop_session": develop_session.to_dict() if develop_session else None,
+        "develop_sessions": [develop_session.to_dict()] if develop_session else [],
     }
 
 
@@ -138,6 +146,78 @@ def write_new_sidecar(
     return path
 
 
+def sidecar_matches_context(
+    *,
+    sidecar_path: Path,
+    source_image_path: Path,
+    source_image_size: tuple[int, int],
+    screen_size: tuple[int, int],
+    settings: ImageSettings,
+) -> bool:
+    try:
+        payload = read_sidecar(sidecar_path)
+    except (OSError, json.JSONDecodeError):
+        return False
+
+    source_raw = str(payload.get("source_image_path", "")).strip()
+    if not source_raw:
+        return False
+    stored_source = Path(source_raw)
+    if not stored_source.is_absolute():
+        stored_source = (sidecar_path.parent / stored_source).resolve()
+    if _safe_resolved_path(stored_source) != _safe_resolved_path(source_image_path):
+        return False
+
+    source_payload = payload.get("source_image")
+    if not isinstance(source_payload, dict):
+        return False
+    if (
+        _payload_int(source_payload, "width") != int(source_image_size[0])
+        or _payload_int(source_payload, "height") != int(source_image_size[1])
+    ):
+        return False
+
+    screen_payload = payload.get("screen")
+    if not isinstance(screen_payload, dict):
+        return False
+    if (
+        _payload_int(screen_payload, "width") != int(screen_size[0])
+        or _payload_int(screen_payload, "height") != int(screen_size[1])
+    ):
+        return False
+
+    settings_payload = payload.get("settings")
+    if not isinstance(settings_payload, dict):
+        return False
+    return ImageSettings.from_dict(settings_payload).to_dict() == settings.sanitized().to_dict()
+
+
+def append_develop_session(
+    *,
+    sidecar_path: Path,
+    develop_session: DevelopSessionMetadata,
+    updated_at: datetime | None = None,
+) -> None:
+    payload = read_sidecar(sidecar_path)
+    now = updated_at or utc_now()
+    sessions_payload = payload.get("develop_sessions")
+    sessions: list[Any]
+    if isinstance(sessions_payload, list):
+        sessions = [session for session in sessions_payload if isinstance(session, dict)]
+    else:
+        sessions = []
+
+    legacy_session = payload.get("develop_session")
+    if not sessions and isinstance(legacy_session, dict) and legacy_session.get("status") != "running":
+        sessions.append(legacy_session)
+
+    sessions.append(develop_session.to_dict())
+    payload["develop_sessions"] = sessions
+    payload["develop_session"] = sessions[-1]
+    payload["updated_at_utc"] = iso_utc(now)
+    sidecar_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def update_develop_session(
     *,
     sidecar_path: Path,
@@ -162,6 +242,13 @@ def update_develop_session(
         }
     )
     payload["develop_session"] = session_payload
+    sessions_payload = payload.get("develop_sessions")
+    if isinstance(sessions_payload, list) and sessions_payload:
+        latest = sessions_payload[-1]
+        if isinstance(latest, dict):
+            latest.update(session_payload)
+    elif isinstance(sessions_payload, list):
+        sessions_payload.append(session_payload)
     payload["updated_at_utc"] = iso_utc(now)
     sidecar_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 

@@ -22,7 +22,9 @@ from .image_ops import (
 )
 from .session import DevelopSessionTimer, TripleClickDetector
 from .sidecar import (
+    append_develop_session,
     DevelopSessionMetadata,
+    sidecar_matches_context,
     source_and_settings_from_sidecar,
     update_develop_session,
     write_new_sidecar,
@@ -818,14 +820,29 @@ class ScreenPrinterApp:
             rendered_screen_width=screen_size[0],
             rendered_screen_height=screen_size[1],
         )
-        self.active_develop_sidecar = write_new_sidecar(
+        source_size = self._source_size()
+        if self.last_sidecar_path is not None and sidecar_matches_context(
+            sidecar_path=self.last_sidecar_path,
             source_image_path=self.source_path,
-            source_image_size=self._source_size(),
+            source_image_size=source_size,
             screen_size=screen_size,
             settings=self.settings,
-            develop_session=session,
-            created_at=started,
-        )
+        ):
+            append_develop_session(
+                sidecar_path=self.last_sidecar_path,
+                develop_session=session,
+                updated_at=started,
+            )
+            self.active_develop_sidecar = self.last_sidecar_path
+        else:
+            self.active_develop_sidecar = write_new_sidecar(
+                source_image_path=self.source_path,
+                source_image_size=source_size,
+                screen_size=screen_size,
+                settings=self.settings,
+                develop_session=session,
+                created_at=started,
+            )
         self.last_sidecar_path = self.active_develop_sidecar
 
         rendered = render_develop_image(

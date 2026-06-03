@@ -6,8 +6,10 @@ from pathlib import Path
 
 from screen_printer.image_ops import ImageSettings
 from screen_printer.sidecar import (
+    append_develop_session,
     DevelopSessionMetadata,
     read_sidecar,
+    sidecar_matches_context,
     source_and_settings_from_sidecar,
     update_develop_session,
     write_new_sidecar,
@@ -62,6 +64,7 @@ def test_sidecar_contains_settings_screen_and_source_metadata(tmp_path: Path) ->
     assert payload["settings"]["invert"] is True
     assert payload["settings"]["flip_horizontal"] is True
     assert payload["settings"]["blur_radius"] == 1.5
+    assert payload["develop_sessions"] == []
 
 
 def test_sidecar_can_restore_source_and_settings(tmp_path: Path) -> None:
@@ -123,4 +126,73 @@ def test_develop_sidecar_is_updated_when_session_ends(tmp_path: Path) -> None:
     assert develop["elapsed_seconds"] == 62.346
     assert develop["exit_reason"] == "confirmed"
     assert develop["status"] == "complete"
+    assert payload["develop_sessions"][-1] == develop
     assert payload["updated_at_utc"] == "2026-05-31T12:01:02Z"
+
+
+def test_matching_sidecar_can_append_multiple_develop_sessions(tmp_path: Path) -> None:
+    source = tmp_path / "negative.png"
+    source.write_bytes(b"placeholder")
+    settings = ImageSettings(invert=True, exposure_percent=15)
+    path = write_new_sidecar(
+        source_image_path=source,
+        source_image_size=(120, 80),
+        screen_size=(480, 320),
+        settings=settings,
+        created_at=datetime(2026, 5, 31, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert sidecar_matches_context(
+        sidecar_path=path,
+        source_image_path=source,
+        source_image_size=(120, 80),
+        screen_size=(480, 320),
+        settings=settings,
+    )
+
+    first = DevelopSessionMetadata(started_at_utc="2026-05-31T12:01:00Z")
+    second = DevelopSessionMetadata(started_at_utc="2026-05-31T12:03:00Z")
+    append_develop_session(
+        sidecar_path=path,
+        develop_session=first,
+        updated_at=datetime(2026, 5, 31, 12, 1, tzinfo=timezone.utc),
+    )
+    update_develop_session(
+        sidecar_path=path,
+        ended_at=datetime(2026, 5, 31, 12, 2, tzinfo=timezone.utc),
+        elapsed_seconds=60,
+        exit_reason="confirmed",
+        rendered_screen_size=(480, 320),
+    )
+    append_develop_session(
+        sidecar_path=path,
+        develop_session=second,
+        updated_at=datetime(2026, 5, 31, 12, 3, tzinfo=timezone.utc),
+    )
+
+    payload = read_sidecar(path)
+    assert len(payload["develop_sessions"]) == 2
+    assert payload["develop_sessions"][0]["status"] == "complete"
+    assert payload["develop_sessions"][0]["elapsed_seconds"] == 60
+    assert payload["develop_sessions"][1]["started_at_utc"] == "2026-05-31T12:03:00Z"
+    assert payload["develop_sessions"][1]["status"] == "running"
+    assert payload["develop_session"] == payload["develop_sessions"][1]
+
+
+def test_sidecar_context_rejects_changed_settings(tmp_path: Path) -> None:
+    source = tmp_path / "negative.png"
+    source.write_bytes(b"placeholder")
+    path = write_new_sidecar(
+        source_image_path=source,
+        source_image_size=(120, 80),
+        screen_size=(480, 320),
+        settings=ImageSettings(exposure_percent=15),
+    )
+
+    assert not sidecar_matches_context(
+        sidecar_path=path,
+        source_image_path=source,
+        source_image_size=(120, 80),
+        screen_size=(480, 320),
+        settings=ImageSettings(exposure_percent=16),
+    )
